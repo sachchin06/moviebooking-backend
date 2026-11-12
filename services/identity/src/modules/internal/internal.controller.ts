@@ -10,6 +10,7 @@ import {
 import { ApiTags, ApiOperation, ApiExcludeController } from '@nestjs/swagger';
 import { SkipTransform, InternalApiGuard } from '@moviebooking/common';
 import { InternalService } from './internal.service';
+import { UserIdsDto } from './dto/user-ids.dto';
 
 @ApiExcludeController()
 @ApiTags('internal')
@@ -27,7 +28,7 @@ export class InternalController {
 
   @Post('users/batch')
   @ApiOperation({ summary: 'Get users by IDs (internal)' })
-  async getUsersByIds(@Body() body: { userIds: number[] }) {
+  async getUsersByIds(@Body() body: UserIdsDto) {
     return this.internalService.getUsersByIds(body.userIds);
   }
 }

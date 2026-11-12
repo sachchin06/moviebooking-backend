@@ -1,11 +1,18 @@
-import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiExcludeController } from '@nestjs/swagger';
-import { SkipTransform } from '@moviebooking/common';
+import { SkipTransform, InternalApiGuard } from '@moviebooking/common';
 import { InternalService } from './internal.service';
 import { ParseIdListPipe } from './pipes/parse-id-list.pipe';
 
 /**
- * Internal APIs for service-to-service communication. No auth required.
+ * Internal APIs for service-to-service communication. Callers must send X-Internal-Key.
  *
  * Route order matters: Express matches routes in the order they are declared, so
  * static paths such as `shows/by-screens` must come before `shows/:id`, otherwise
@@ -14,6 +21,7 @@ import { ParseIdListPipe } from './pipes/parse-id-list.pipe';
 @ApiExcludeController()
 @ApiTags('internal')
 @SkipTransform()
+@UseGuards(InternalApiGuard)
 @Controller('internal')
 export class InternalController {
   constructor(private readonly internalService: InternalService) {}

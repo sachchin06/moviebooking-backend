@@ -7,9 +7,14 @@ import {
   TransformInterceptor,
   LoggingInterceptor,
   initIdCipher,
+  assertRequiredEnv,
+  INTERNAL_API_KEY_ENV,
 } from '@moviebooking/common';
 
 async function bootstrap() {
+  // Refuse to start without the key that protects /internal routes.
+  assertRequiredEnv([INTERNAL_API_KEY_ENV]);
+
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('IdentityService');
 

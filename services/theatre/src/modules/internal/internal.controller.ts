@@ -5,17 +5,19 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
-import { SkipTransform } from '@moviebooking/common';
+import { SkipTransform, InternalApiGuard } from '@moviebooking/common';
 import { InternalService } from './internal.service';
 
 /**
  * Internal API for service-to-service calls.
- * Not authenticated: anything that can reach this port can call these routes.
+ * Callers must send X-Internal-Key (checked by InternalApiGuard).
  */
 @ApiTags('internal')
 @SkipTransform()
+@UseGuards(InternalApiGuard)
 @Controller('internal')
 export class InternalController {
   constructor(private readonly internalService: InternalService) {}

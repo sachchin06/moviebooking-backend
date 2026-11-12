@@ -7,6 +7,8 @@ import {
   LoggingInterceptor,
   TransformInterceptor,
   initIdCipher,
+  assertRequiredEnv,
+  INTERNAL_API_KEY_ENV,
 } from '@moviebooking/common';
 
 /**
@@ -14,6 +16,9 @@ import {
  * Configures global pipes, filters, interceptors, CORS, and Swagger documentation.
  */
 async function bootstrap() {
+  // Refuse to start without the key that protects /internal routes.
+  assertRequiredEnv([INTERNAL_API_KEY_ENV]);
+
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 

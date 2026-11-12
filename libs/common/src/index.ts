@@ -40,6 +40,9 @@ export * from './utils/env.util';
 // Modules
 export * from './modules/dev/dev.module';
 
+// Service start-up
+export * from './bootstrap/bootstrap-service';
+
 // Service Clients (inter-service communication)
 export * from './clients/base-service.client';
 export * from './clients/service-client.module';

@@ -23,12 +23,12 @@ export class MovieClient extends BaseServiceClient {
     super(httpService, 'MovieClient');
   }
 
-  /** Fetches a single movie by ID. Returns null if not found or service unavailable. */
+  /** Fetches a single movie by ID. Returns null if not found; throws SERVICE_UNAVAILABLE if the service is down. */
   async getMovie(movieId: number): Promise<MovieDto | null> {
     return this.get<MovieDto>(`/api/internal/movies/${movieId}`);
   }
 
-  /** Fetches multiple movies in a single call. Returns empty array on failure. */
+  /** Fetches multiple movies in a single call. Throws SERVICE_UNAVAILABLE if the service is down. */
   async getMoviesByIds(movieIds: number[]): Promise<MovieDto[]> {
     if (!movieIds.length) return [];
     const result = await this.post<MovieDto[]>('/api/internal/movies/batch', {

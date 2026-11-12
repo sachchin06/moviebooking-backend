@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { throwError } from '@moviebooking/common';
 import { In, Repository } from 'typeorm';
 import { Movie, MovieImage, MovieStatus } from '../../entities';
 
@@ -27,10 +28,10 @@ export class InternalService {
     private readonly movieImageRepository: Repository<MovieImage>,
   ) {}
 
-  /** Fetches a movie by ID. Returns null if not found. */
-  async getMovieById(id: number): Promise<InternalMovieResponse | null> {
+  /** Fetches a movie by ID. Throws NOT_FOUND (404) if it does not exist. */
+  async getMovieById(id: number): Promise<InternalMovieResponse> {
     const movie = await this.movieRepository.findOne({ where: { id } });
-    if (!movie) return null;
+    if (!movie) throwError('NOT_FOUND', 'Movie not found');
 
     const primaryImage = await this.movieImageRepository.findOne({
       where: { movieId: id, isPrimary: true },

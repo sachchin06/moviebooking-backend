@@ -214,35 +214,38 @@ export class AuthService {
   }
 
   async refreshToken(refreshToken: string) {
+    // Only a bad or expired token means TOKEN_INVALID. Errors after this point
+    // (e.g. Theatre Service down → 503) must keep their own status.
+    let payload: { sub: number };
     try {
-      const payload = this.jwtService.verify(refreshToken, {
+      payload = this.jwtService.verify(refreshToken, {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
       });
-
-      const user = await this.userRepository.findOne({
-        where: { id: payload.sub },
-        relations: ['role'],
-      });
-
-      if (!user || user.status !== UserStatus.ACTIVE) {
-        throwError('TOKEN_INVALID');
-      }
-
-      // Fetch fresh theatreId for Theatre Admin
-      let theatreId: number | null = null;
-      if (user.role.code === ROLES.THEATRE_ADMIN) {
-        theatreId = await this.theatreClient.getTheatreIdByUserId(user.id);
-      }
-
-      const accessToken = this.generateAccessToken(user, theatreId);
-
-      return {
-        accessToken,
-        expiresIn: 3600,
-      };
     } catch {
       throwError('TOKEN_INVALID');
     }
+
+    const user = await this.userRepository.findOne({
+      where: { id: payload.sub },
+      relations: ['role'],
+    });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throwError('TOKEN_INVALID');
+    }
+
+    // Fetch fresh theatreId for Theatre Admin
+    let theatreId: number | null = null;
+    if (user.role.code === ROLES.THEATRE_ADMIN) {
+      theatreId = await this.theatreClient.getTheatreIdByUserId(user.id);
+    }
+
+    const accessToken = this.generateAccessToken(user, theatreId);
+
+    return {
+      accessToken,
+      expiresIn: 3600,
+    };
   }
 
   private generateAccessToken(

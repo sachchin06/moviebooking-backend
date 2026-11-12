@@ -2,7 +2,6 @@ import {
   Controller,
   Post,
   Get,
-  Delete,
   Body,
   Param,
   HttpCode,
@@ -86,12 +85,12 @@ export class BookingsController {
     return this.mapBookingResponse(booking);
   }
 
-  @Delete(':bookingRef')
+  @Post(':bookingRef/cancel')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Cancel a booking (guest cancellation)',
     description:
-      'Requires the booking email in the JSON body. Only HOLDING bookings can be cancelled.',
+      'Requires the booking email in the JSON body ({ email }). Only HOLDING bookings can be cancelled.',
   })
   @ApiResponse({
     status: 200,

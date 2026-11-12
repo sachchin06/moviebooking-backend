@@ -73,4 +73,22 @@ describe('InternalController routes', () => {
     expect(res.status).toBe(200);
     expect(internalService.getShowById).toHaveBeenCalledWith(5);
   });
+
+  it.each([
+    ['no key', {}],
+    ['a wrong key', { 'X-Internal-Key': 'wrong' }],
+  ])(
+    'returns 401 with %s and never calls the service',
+    async (_label, headers) => {
+      for (const path of [
+        '/internal/shows/5',
+        '/internal/shows/by-screens?screenIds=1',
+      ]) {
+        const res = await fetch(`${baseUrl}${path}`, { headers });
+        expect(res.status).toBe(401);
+      }
+      expect(internalService.getShowById).not.toHaveBeenCalled();
+      expect(internalService.getShowIdsByScreens).not.toHaveBeenCalled();
+    },
+  );
 });

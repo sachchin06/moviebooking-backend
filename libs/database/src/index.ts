@@ -1,5 +1,6 @@
 // Data Source
 export * from './data-source';
+export * from './typeorm-config';
 
 // Base Entity
 export * from './entities/base.entity';

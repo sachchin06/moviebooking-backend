@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { User, UserStatus } from '../../entities';
 import {
   throwError,
@@ -14,6 +15,15 @@ import {
 import { TheatreClient } from '../../clients/theatre.client';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+
+/**
+ * bcrypt hash (12 rounds, like real passwords) of a random value nobody knows. Used
+ * when the email is unknown so the comparison still costs the same time.
+ */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
+  randomBytes(32).toString('hex'),
+  12,
+);
 
 export interface RoleResponse {
   id: string;
@@ -65,18 +75,17 @@ export class AuthService {
       relations: ['role'],
     });
 
-    if (!user) {
-      throwError('INVALID_CREDENTIALS');
-    }
+    // Always run one bcrypt comparison, even for an unknown email, so response
+    // time does not reveal which emails have accounts.
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+    );
 
-    // Check if user is active
-    if (user.status !== UserStatus.ACTIVE) {
-      throwError('INVALID_CREDENTIALS', 'Account is disabled');
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
+    // Unknown email, wrong password and disabled account all get the same generic
+    // error, and the account status is only considered after a correct password,
+    // so the response never confirms that an account exists or is disabled.
+    if (!user || !isPasswordValid || user.status !== UserStatus.ACTIVE) {
       throwError('INVALID_CREDENTIALS');
     }
 

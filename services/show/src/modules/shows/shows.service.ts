@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Show, ShowPrice, ShowStatus } from '../../entities';
 import {
   throwError,
@@ -22,6 +22,9 @@ import {
 import { MovieClient, MovieDto } from '../../clients/movie.client';
 import { BookingClient } from '../../clients/booking.client';
 
+/** How long a schedule change waits for another change on the same screen. */
+export const SCHEDULE_LOCK_TIMEOUT_MS = 5000;
+
 @Injectable()
 export class ShowsService {
   private readonly logger = new Logger(ShowsService.name);
@@ -34,6 +37,7 @@ export class ShowsService {
     private readonly theatreClient: TheatreClient,
     private readonly movieClient: MovieClient,
     private readonly bookingClient: BookingClient,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateShowDto, user: ICurrentUser) {
@@ -62,17 +66,20 @@ export class ShowsService {
       throwError('VALIDATION_ERROR', 'Show end time must be after start time');
     }
 
-    await this.checkOverlap(screenId, startsAt, endsAt);
-
-    const show = this.showRepository.create({
-      screenId,
-      movieId,
-      startsAt,
-      endsAt,
-      status: ShowStatus.ACTIVE,
+    // Check and insert under the screen's schedule lock (see lockScreenSchedule).
+    const saved = await this.dataSource.transaction(async (manager) => {
+      await this.lockScreenSchedule(manager, screenId);
+      await this.checkOverlap(manager, screenId, startsAt, endsAt);
+      return manager.save(
+        manager.create(Show, {
+          screenId,
+          movieId,
+          startsAt,
+          endsAt,
+          status: ShowStatus.ACTIVE,
+        }),
+      );
     });
-
-    const saved = await this.showRepository.save(show);
     this.logger.log(`Show created: ${saved.id} for screen ${saved.screenId}`);
     return this.mapMutationResponse(saved);
   }
@@ -227,25 +234,36 @@ export class ShowsService {
       );
     }
 
-    if (dto.startsAt || dto.endsAt) {
-      const newStartsAt = dto.startsAt ? new Date(dto.startsAt) : show.startsAt;
-      const newEndsAt = dto.endsAt ? new Date(dto.endsAt) : show.endsAt;
+    const timeChanges = dto.startsAt !== undefined || dto.endsAt !== undefined;
+    const newStartsAt = dto.startsAt ? new Date(dto.startsAt) : show.startsAt;
+    const newEndsAt = dto.endsAt ? new Date(dto.endsAt) : show.endsAt;
 
-      if (newEndsAt <= newStartsAt) {
-        throwError(
-          'VALIDATION_ERROR',
-          'Show end time must be after start time',
-        );
-      }
-
-      await this.checkOverlap(show.screenId, newStartsAt, newEndsAt, id);
+    if (timeChanges && newEndsAt <= newStartsAt) {
+      throwError('VALIDATION_ERROR', 'Show end time must be after start time');
     }
 
-    if (dto.startsAt) show.startsAt = new Date(dto.startsAt);
-    if (dto.endsAt) show.endsAt = new Date(dto.endsAt);
-    if (dto.status) show.status = dto.status;
+    // Overlaps only matter between ACTIVE shows: check when an active show moves,
+    // or when an inactive show is reactivated into a slot that may now be taken.
+    const willBeActive = (dto.status ?? show.status) === ShowStatus.ACTIVE;
+    const needsOverlapCheck =
+      willBeActive && (timeChanges || show.status !== ShowStatus.ACTIVE);
 
-    const updated = await this.showRepository.save(show);
+    const updated = await this.dataSource.transaction(async (manager) => {
+      if (needsOverlapCheck) {
+        await this.lockScreenSchedule(manager, show.screenId);
+        await this.checkOverlap(
+          manager,
+          show.screenId,
+          newStartsAt,
+          newEndsAt,
+          id,
+        );
+      }
+      show.startsAt = newStartsAt;
+      show.endsAt = newEndsAt;
+      if (dto.status) show.status = dto.status;
+      return manager.save(Show, show);
+    });
     this.logger.log(`Show updated: ${updated.id}`);
     return this.mapMutationResponse(updated);
   }
@@ -287,15 +305,55 @@ export class ShowsService {
     }
   }
 
-  /** Checks if two time intervals overlap on the same screen. */
+  /**
+   * Serialises schedule changes per screen for the rest of the transaction.
+   *
+   * Without it, two requests can both run the overlap check, both see a free slot,
+   * and both insert: the classic check-then-insert race. sp_getapplock takes an
+   * exclusive application lock named after the screen, owned by the transaction, so a
+   * second change to the same screen waits until the first commits or rolls back,
+   * then sees its row. Changes to different screens never wait for each other.
+   *
+   * Chosen over an UPDLOCK/HOLDLOCK range query because the overlap test is a range
+   * on two columns (starts_at < :end AND ends_at > :start): key-range locks would
+   * depend on which index the optimiser picks and could lock far more than one
+   * screen. An application lock is explicit, cheap and exactly per screen.
+   */
+  private async lockScreenSchedule(
+    manager: EntityManager,
+    screenId: number,
+  ): Promise<void> {
+    const rows: { result: number }[] = await manager.query(
+      `DECLARE @result int;
+       EXEC @result = sp_getapplock
+         @Resource = @0,
+         @LockMode = 'Exclusive',
+         @LockOwner = 'Transaction',
+         @LockTimeout = @1;
+       SELECT @result AS result;`,
+      [`show-schedule:screen:${screenId}`, SCHEDULE_LOCK_TIMEOUT_MS],
+    );
+
+    // 0 or 1 = granted; negative = timeout, deadlock victim or error.
+    const result = rows?.[0]?.result;
+    if (typeof result !== 'number' || result < 0) {
+      throwError(
+        'CONFLICT',
+        "Another change to this screen's schedule is in progress; please try again",
+      );
+    }
+  }
+
+  /** Throws when the interval overlaps an ACTIVE show on the same screen. */
   private async checkOverlap(
+    manager: EntityManager,
     screenId: number,
     startsAt: Date,
     endsAt: Date,
     excludeShowId?: number,
   ): Promise<void> {
-    const qb = this.showRepository
-      .createQueryBuilder('show')
+    const qb = manager
+      .createQueryBuilder(Show, 'show')
       .where('show.screenId = :screenId', { screenId })
       .andWhere('show.status = :status', { status: ShowStatus.ACTIVE })
       .andWhere('show.startsAt < :endsAt', { endsAt })

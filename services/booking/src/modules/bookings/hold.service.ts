@@ -180,7 +180,7 @@ export class HoldService {
       throw error;
     }
 
-    return this.bookingRepo.findOne({
+    return this.bookingRepo.findOneOrFail({
       where: { id: bookingId },
       relations: ['seats', 'holds'],
     });

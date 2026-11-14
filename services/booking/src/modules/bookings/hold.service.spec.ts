@@ -102,7 +102,9 @@ function buildService(managerOptions: ManagerOptions = {}) {
     generateUniqueRef: jest.fn().mockResolvedValue('ABCDEFGHJK'),
   };
   const bookingRepo = {
-    findOne: jest.fn().mockResolvedValue({ id: 99, bookingRef: 'ABCDEFGHJK' }),
+    findOneOrFail: jest
+      .fn()
+      .mockResolvedValue({ id: 99, bookingRef: 'ABCDEFGHJK' }),
   };
 
   const service = new HoldService(

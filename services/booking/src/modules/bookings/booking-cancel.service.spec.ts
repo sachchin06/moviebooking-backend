@@ -26,7 +26,9 @@ function build(booking: ReturnType<typeof makeBooking> | null) {
     update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const bookingRepo = {
-    findOne: jest.fn().mockResolvedValue({ ...booking, seats: [], holds: [] }),
+    findOneOrFail: jest
+      .fn()
+      .mockResolvedValue({ ...booking, seats: [], holds: [] }),
   };
   const publisher = { publishFailed: jest.fn().mockResolvedValue(undefined) };
   const service = new BookingCancelService(

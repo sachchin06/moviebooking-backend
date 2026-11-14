@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { Seat, SeatStatus, Screen, ScreenStatus } from '../../entities';
 import {
   throwError,
@@ -262,52 +262,39 @@ export class SeatsService {
       seatIds.push(decrypted);
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    // The same seat twice would make the update ambiguous (which seatType wins?).
+    if (new Set(seatIds).size !== seatIds.length) {
+      throwError(
+        'DUPLICATE_RESOURCE',
+        'Each seat may appear only once in a bulk update',
+      );
+    }
 
-    try {
-      const seats = await queryRunner.manager.find(Seat, {
-        where: seatIds.map((id) => ({ id, screenId })),
+    // dataSource.transaction rolls back exactly once if anything throws, so a
+    // NOT_FOUND below reaches the client as 404 (a manual rollback followed by a
+    // second rollback in a catch block used to turn it into a 500).
+    const updated = await this.dataSource.transaction(async (manager) => {
+      const seats = await manager.find(Seat, {
+        where: { id: In(seatIds), screenId },
       });
 
-      if (seats.length !== dto.seats.length) {
-        await queryRunner.rollbackTransaction();
+      if (seats.length !== seatIds.length) {
         throwError('NOT_FOUND', 'One or more seats not found in this screen');
       }
 
-      const seatMap = new Map(seats.map((s) => [s.id, s]));
+      const seatMap = new Map(seats.map((seat) => [seat.id, seat]));
+      dto.seats.forEach((item, i) => {
+        seatMap.get(seatIds[i])!.seatType = item.seatType;
+      });
 
-      for (let i = 0; i < dto.seats.length; i++) {
-        const seatId = seatIds[i];
-        const seat = seatMap.get(seatId);
-        if (seat) {
-          seat.seatType = dto.seats[i].seatType;
-        }
-      }
+      return manager.save(Seat, seats);
+    });
 
-      const updated = await queryRunner.manager.save(
-        Seat,
-        Array.from(seatMap.values()),
-      );
-
-      await queryRunner.commitTransaction();
-      this.logger.log(`Successfully updated ${updated.length} seats`);
-
-      return {
-        updated: updated.length,
-        seats: this.mapResponses(updated),
-      };
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      this.logger.error(
-        `Failed to bulk update seats: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
+    this.logger.log(`Successfully updated ${updated.length} seats`);
+    return {
+      updated: updated.length,
+      seats: this.mapResponses(updated),
+    };
   }
 
   // ============ Private Helper Methods ============
@@ -388,13 +375,11 @@ export class SeatsService {
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   }
 
-  private isDuplicateConstraintError(error: any): boolean {
-    return (
-      error.code === 'ER_DUP_ENTRY' ||
-      error.code === '23505' ||
-      (error.constraint && error.constraint.includes('unique')) ||
-      (error.message && error.message.includes('UNIQUE constraint'))
-    );
+  /** True for SQL Server unique constraint (2627) or unique index (2601) violations. */
+  private isDuplicateConstraintError(error: unknown): boolean {
+    const err = error as { number?: number; driverError?: { number?: number } };
+    const errorNumber = err?.number ?? err?.driverError?.number;
+    return errorNumber === 2627 || errorNumber === 2601;
   }
 
   private mapResponse(seat: Seat) {

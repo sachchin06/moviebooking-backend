@@ -15,6 +15,7 @@ import {
 import { TheatreClient } from '../../clients/theatre.client';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { parseDurationToSeconds } from './token-lifetime';
 
 /**
  * bcrypt hash (12 rounds, like real passwords) of a random value nobody knows. Used
@@ -58,13 +59,26 @@ export interface ProfileResponse {
 
 @Injectable()
 export class AuthService {
+  /** Access and refresh token lifetimes from JWT config, in seconds. */
+  private readonly accessTokenTtlSeconds: number;
+  private readonly refreshTokenTtlSeconds: number;
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly theatreClient: TheatreClient,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.accessTokenTtlSeconds = parseDurationToSeconds(
+      'JWT_EXPIRES_IN',
+      configService.get<string>('JWT_EXPIRES_IN', '1h'),
+    );
+    this.refreshTokenTtlSeconds = parseDurationToSeconds(
+      'JWT_REFRESH_EXPIRES_IN',
+      configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
+    );
+  }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
@@ -215,14 +229,14 @@ export class AuthService {
       { sub: user.id },
       {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get('JWT_REFRESH_EXPIRES_IN', '7d'),
+        expiresIn: this.refreshTokenTtlSeconds,
       },
     );
 
     return {
       accessToken,
       refreshToken,
-      expiresIn: 3600,
+      expiresIn: this.accessTokenTtlSeconds,
     };
   }
 
@@ -257,7 +271,7 @@ export class AuthService {
 
     return {
       accessToken,
-      expiresIn: 3600,
+      expiresIn: this.accessTokenTtlSeconds,
     };
   }
 
@@ -286,6 +300,8 @@ export class AuthService {
       payload.mustChangePassword = true;
     }
 
-    return this.jwtService.sign(payload);
+    return this.jwtService.sign(payload, {
+      expiresIn: this.accessTokenTtlSeconds,
+    });
   }
 }

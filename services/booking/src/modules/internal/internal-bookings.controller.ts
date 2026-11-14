@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -8,6 +8,7 @@ import {
 import { SkipTransform, InternalApiGuard } from '@moviebooking/common';
 import { InternalBookingsService } from './internal-bookings.service';
 import { InternalTransitionsService } from './internal-transitions.service';
+import { BookingExistsQueryDto } from './dto/booking-exists-query.dto';
 
 @ApiTags('internal')
 @UseGuards(InternalApiGuard)
@@ -17,6 +18,19 @@ export class InternalBookingsController {
     private readonly internalBookingsService: InternalBookingsService,
     private readonly internalTransitionsService: InternalTransitionsService,
   ) {}
+
+  // Declared before ':bookingRef' so "exists" is not captured as a booking reference.
+  @Get('exists')
+  @SkipTransform()
+  @ApiExcludeEndpoint()
+  @ApiOperation({
+    summary: 'Whether a show has live bookings (internal)',
+    description:
+      'Counts bookings in HOLDING, PAYMENT_PENDING, CONFIRMED or PENDING_REVIEW. Used by the Show Service before rescheduling or deleting a show.',
+  })
+  async exists(@Query() query: BookingExistsQueryDto) {
+    return this.internalBookingsService.existsForShow(query.showId);
+  }
 
   @Get(':bookingRef')
   @SkipTransform()

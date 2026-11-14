@@ -57,6 +57,11 @@ export const ERRORS = {
     message: 'Resource already exists',
     status: HttpStatus.CONFLICT,
   },
+  CONFLICT: {
+    code: 'CONFLICT',
+    message: 'The request conflicts with the current state of the resource',
+    status: HttpStatus.CONFLICT,
+  },
 
   // Database
   DB_DUPLICATE_KEY: {

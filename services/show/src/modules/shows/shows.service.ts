@@ -20,6 +20,7 @@ import {
   TheatreDto,
 } from '../../clients/theatre.client';
 import { MovieClient, MovieDto } from '../../clients/movie.client';
+import { BookingClient } from '../../clients/booking.client';
 
 @Injectable()
 export class ShowsService {
@@ -32,6 +33,7 @@ export class ShowsService {
     private readonly showPriceRepository: Repository<ShowPrice>,
     private readonly theatreClient: TheatreClient,
     private readonly movieClient: MovieClient,
+    private readonly bookingClient: BookingClient,
   ) {}
 
   async create(dto: CreateShowDto, user: ICurrentUser) {
@@ -216,13 +218,12 @@ export class ShowsService {
       await this.verifyScreenOwnership(show.screenId, user.theatreId);
     }
 
-    // TODO: block time changes when bookings exist (needs a Booking Service lookup)
-    const hasBookings = false;
-
-    if (hasBookings && (dto.startsAt || dto.endsAt)) {
-      throwError(
-        'BUSINESS_RULE_VIOLATION',
-        'Cannot update show times when bookings exist',
+    // Guests have bookings for this time: moving the show would invalidate them.
+    // (The DTO cannot change the screen, so time is the only thing to protect.)
+    if (dto.startsAt !== undefined || dto.endsAt !== undefined) {
+      await this.assertNoLiveBookings(
+        id,
+        'Cannot change the time of a show that has bookings',
       );
     }
 
@@ -260,15 +261,10 @@ export class ShowsService {
       await this.verifyScreenOwnership(show.screenId, user.theatreId);
     }
 
-    // TODO: block delete when bookings exist (needs a Booking Service lookup)
-    const hasBookings = false;
-
-    if (hasBookings) {
-      throwError(
-        'BUSINESS_RULE_VIOLATION',
-        'Cannot delete show with existing bookings',
-      );
-    }
+    await this.assertNoLiveBookings(
+      id,
+      'Cannot delete a show that has bookings',
+    );
 
     await this.showRepository.softDelete(id);
     this.logger.log(`Show deleted: ${id}`);
@@ -276,6 +272,20 @@ export class ShowsService {
   }
 
   // Private Helper Methods
+
+  /**
+   * Throws CONFLICT (409) when the show has live bookings. If the Booking Service is
+   * down, the client throws SERVICE_UNAVAILABLE (503): the change is refused rather
+   * than allowed on an unknown answer.
+   */
+  private async assertNoLiveBookings(
+    showId: number,
+    message: string,
+  ): Promise<void> {
+    if (await this.bookingClient.hasLiveBookings(showId)) {
+      throwError('CONFLICT', message);
+    }
+  }
 
   /** Checks if two time intervals overlap on the same screen. */
   private async checkOverlap(

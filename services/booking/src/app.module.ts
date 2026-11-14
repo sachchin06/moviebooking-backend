@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { createSqlServerOptions } from '@moviebooking/database';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DevModule } from '@moviebooking/common';
 import { Booking, BookingSeat, SeatHold } from './entities';
@@ -26,21 +27,10 @@ const devModules = process.env.NODE_ENV !== 'production' ? [DevModule] : [];
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mssql' as const,
-        host: configService.get<string>('DB_HOST', 'localhost'),
-        port: parseInt(configService.get<string>('DB_PORT', '1433'), 10),
-        username: configService.get<string>('DB_USERNAME', 'sa'),
-        password: configService.get<string>('DB_PASSWORD', ''),
-        database: configService.get<string>('DB_DATABASE', 'moviebooking_db'),
-        entities: [Booking, BookingSeat, SeatHold],
-        synchronize: false,
-        logging: configService.get('NODE_ENV') === 'development',
-        options: {
-          encrypt: false,
-          trustServerCertificate: true,
-        },
-      }),
+      useFactory: (configService: ConfigService) =>
+        createSqlServerOptions((key) => configService.get<string>(key), {
+          entities: [Booking, BookingSeat, SeatHold],
+        }),
     }),
 
     // Cron scheduler (used by the hold expiry sweep)

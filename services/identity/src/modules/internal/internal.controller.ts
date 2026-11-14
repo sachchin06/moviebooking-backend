@@ -5,14 +5,17 @@ import {
   Body,
   Param,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiExcludeController } from '@nestjs/swagger';
-import { SkipTransform } from '@moviebooking/common';
+import { SkipTransform, InternalApiGuard } from '@moviebooking/common';
 import { InternalService } from './internal.service';
+import { UserIdsDto } from './dto/user-ids.dto';
 
 @ApiExcludeController()
 @ApiTags('internal')
 @SkipTransform()
+@UseGuards(InternalApiGuard)
 @Controller('internal')
 export class InternalController {
   constructor(private readonly internalService: InternalService) {}
@@ -25,7 +28,7 @@ export class InternalController {
 
   @Post('users/batch')
   @ApiOperation({ summary: 'Get users by IDs (internal)' })
-  async getUsersByIds(@Body() body: { userIds: number[] }) {
+  async getUsersByIds(@Body() body: UserIdsDto) {
     return this.internalService.getUsersByIds(body.userIds);
   }
 }

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { throwError } from '@moviebooking/common';
 import { In, Repository } from 'typeorm';
 import {
   Theatre,
@@ -33,10 +34,10 @@ export class InternalService {
     return { theatreId: assignment?.theatreId ?? null };
   }
 
-  /** Fetches a theatre by ID. Returns null if not found. */
+  /** Fetches a theatre by ID. Throws NOT_FOUND (404) if it does not exist. */
   async getTheatreById(id: number) {
     const theatre = await this.theatreRepository.findOneBy({ id });
-    if (!theatre) return null;
+    if (!theatre) throwError('NOT_FOUND', 'Theatre not found');
     return this.mapTheatre(theatre);
   }
 
@@ -49,10 +50,10 @@ export class InternalService {
     return theatres.map((t) => this.mapTheatre(t));
   }
 
-  /** Fetches a screen by ID. Returns null if not found. */
+  /** Fetches a screen by ID. Throws NOT_FOUND (404) if it does not exist. */
   async getScreenById(id: number) {
     const screen = await this.screenRepository.findOneBy({ id });
-    if (!screen) return null;
+    if (!screen) throwError('NOT_FOUND', 'Screen not found');
     return this.mapScreen(screen);
   }
 

@@ -101,18 +101,10 @@ export class ShowPricesService {
     screenId: number,
     dto: SetPricesDto,
   ): Promise<void> {
-    let seats;
-    try {
-      seats = await this.theatreClient.getScreenSeats(screenId);
-    } catch (error) {
-      this.logger.error(`Theatre Service unavailable: ${error.message}`);
-      throwError(
-        'SERVICE_UNAVAILABLE',
-        'Theatre Service is currently unavailable',
-      );
-    }
+    // An outage throws SERVICE_UNAVAILABLE from the client itself.
+    const seats = await this.theatreClient.getScreenSeats(screenId);
 
-    if (!seats || seats.length === 0) {
+    if (seats.length === 0) {
       throwError('VALIDATION_ERROR', 'Screen has no seats configured');
     }
 
@@ -140,27 +132,17 @@ export class ShowPricesService {
     screenId: number,
     theatreId: number,
   ): Promise<void> {
-    try {
-      const screen = await this.theatreClient.getScreen(screenId);
+    // An outage throws SERVICE_UNAVAILABLE from the client itself.
+    const screen = await this.theatreClient.getScreen(screenId);
 
-      if (!screen) {
-        throwError('NOT_FOUND', 'Screen not found');
-      }
+    if (!screen) {
+      throwError('NOT_FOUND', 'Screen not found');
+    }
 
-      if (screen.theatreId !== theatreId) {
-        throwError(
-          'FORBIDDEN',
-          'You can only set prices for shows in your assigned theatre',
-        );
-      }
-    } catch (error) {
-      if (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN') {
-        throw error;
-      }
-      this.logger.error(`Theatre Service unavailable: ${error.message}`);
+    if (screen.theatreId !== theatreId) {
       throwError(
-        'SERVICE_UNAVAILABLE',
-        'Theatre Service is currently unavailable',
+        'FORBIDDEN',
+        'You can only set prices for shows in your assigned theatre',
       );
     }
   }

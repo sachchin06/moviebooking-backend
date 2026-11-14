@@ -14,7 +14,8 @@ export class TheatreClient extends BaseServiceClient {
 
   /**
    * Get the assigned theatreId for a user from Theatre Service.
-   * Returns null if user has no assignment or Theatre Service is unavailable.
+   * Returns null if the user has no assignment; throws SERVICE_UNAVAILABLE if the
+   * Theatre Service cannot be reached.
    */
   async getTheatreIdByUserId(userId: number): Promise<number | null> {
     const result = await this.get<TheatreAdminResponse>(

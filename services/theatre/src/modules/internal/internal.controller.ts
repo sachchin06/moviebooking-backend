@@ -5,17 +5,20 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
-import { SkipTransform } from '@moviebooking/common';
+import { SkipTransform, InternalApiGuard } from '@moviebooking/common';
 import { InternalService } from './internal.service';
+import { ScreenIdsDto, TheatreIdsDto } from './dto/batch-ids.dto';
 
 /**
  * Internal API for service-to-service calls.
- * Not authenticated: anything that can reach this port can call these routes.
+ * Callers must send X-Internal-Key (checked by InternalApiGuard).
  */
 @ApiTags('internal')
 @SkipTransform()
+@UseGuards(InternalApiGuard)
 @Controller('internal')
 export class InternalController {
   constructor(private readonly internalService: InternalService) {}
@@ -49,8 +52,8 @@ export class InternalController {
     summary: 'Get multiple theatres by IDs',
     description: 'Internal batch endpoint for efficient list enrichment',
   })
-  async getTheatresByIds(@Body() body: { theatreIds: number[] }) {
-    return this.internalService.getTheatresByIds(body.theatreIds ?? []);
+  async getTheatresByIds(@Body() body: TheatreIdsDto) {
+    return this.internalService.getTheatresByIds(body.theatreIds);
   }
 
   @Get('screens/:id')
@@ -70,8 +73,8 @@ export class InternalController {
     summary: 'Get multiple screens by IDs',
     description: 'Internal batch endpoint for efficient list enrichment',
   })
-  async getScreensByIds(@Body() body: { screenIds: number[] }) {
-    return this.internalService.getScreensByIds(body.screenIds ?? []);
+  async getScreensByIds(@Body() body: ScreenIdsDto) {
+    return this.internalService.getScreensByIds(body.screenIds);
   }
 
   @Get('screens/:id/seats')

@@ -7,7 +7,7 @@ import { BookingQueryService } from './booking-query.service';
 import { BookingCancelService } from './booking-cancel.service';
 
 /** HTTP-level checks for the guest cancel route, with the same ValidationPipe as main.ts. */
-describe('DELETE /bookings/:bookingRef', () => {
+describe('POST /bookings/:bookingRef/cancel', () => {
   let app: INestApplication;
   let baseUrl: string;
   const bookingCancelService = { cancelBooking: jest.fn() };
@@ -42,8 +42,8 @@ describe('DELETE /bookings/:bookingRef', () => {
   beforeEach(() => jest.clearAllMocks());
 
   const cancel = (body?: unknown) =>
-    fetch(`${baseUrl}/bookings/REF0000003`, {
-      method: 'DELETE',
+    fetch(`${baseUrl}/bookings/REF0000003/cancel`, {
+      method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -81,5 +81,15 @@ describe('DELETE /bookings/:bookingRef', () => {
     );
     const body = (await res.json()) as { seats: { seatCode: string }[] };
     expect(body.seats[0].seatCode).toBe('A1');
+  });
+
+  it('no longer accepts DELETE /bookings/:bookingRef', async () => {
+    const res = await fetch(`${baseUrl}/bookings/REF0000003`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'guest@example.com' }),
+    });
+    expect(res.status).toBe(404);
+    expect(bookingCancelService.cancelBooking).not.toHaveBeenCalled();
   });
 });

@@ -15,6 +15,7 @@ interface JwtPayload {
     name: string;
   };
   theatreId?: number;
+  mustChangePassword?: boolean;
 }
 
 /** JWT authentication strategy. Validates tokens and extracts user context. */
@@ -42,6 +43,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       name: payload.name,
       role: payload.role,
       theatreId: payload.theatreId,
+      mustChangePassword: payload.mustChangePassword === true,
     };
   }
 }

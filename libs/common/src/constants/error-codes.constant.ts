@@ -40,6 +40,11 @@ export const ERRORS = {
     message: 'Access denied',
     status: HttpStatus.FORBIDDEN,
   },
+  PASSWORD_CHANGE_REQUIRED: {
+    code: 'PASSWORD_CHANGE_REQUIRED',
+    message: 'You must change your temporary password before continuing',
+    status: HttpStatus.FORBIDDEN,
+  },
   UNAUTHORIZED: {
     code: 'UNAUTHORIZED',
     message: 'Authentication required',

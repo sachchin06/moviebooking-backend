@@ -7,6 +7,7 @@ export * from './decorators/current-user.decorator';
 export * from './decorators/decrypt-id.decorator';
 export * from './decorators/skip-transform.decorator';
 export * from './decorators/roles.decorator';
+export * from './decorators/allow-password-change-pending.decorator';
 
 // Filters
 export * from './filters/http-exception.filter';

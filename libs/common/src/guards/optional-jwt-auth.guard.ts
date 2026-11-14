@@ -17,7 +17,11 @@ export class OptionalJwtAuthGuard extends AuthGuard('jwt') {
   }
 
   handleRequest(_err: any, user: any) {
-    // Don't throw on invalid token, just return null
-    return user || null;
+    // Don't throw on invalid token, just return null. A user who still has to change
+    // a temporary password is treated as a guest until they do.
+    if (!user || user.mustChangePassword) {
+      return null;
+    }
+    return user;
   }
 }

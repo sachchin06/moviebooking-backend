@@ -170,7 +170,11 @@ export class AuthService {
 
     await this.userRepository.save(user);
 
-    return { message: 'Password changed successfully' };
+    // Tokens issued before the change still carry mustChangePassword; the client
+    // calls /auth/refresh to get an access token without it.
+    return {
+      message: 'Password changed successfully. Refresh your token to continue.',
+    };
   }
 
   async getProfile(userId: number) {
@@ -275,6 +279,11 @@ export class AuthService {
 
     if (user.role.code === ROLES.THEATRE_ADMIN && theatreId) {
       payload.theatreId = theatreId;
+    }
+
+    // Enforced by JwtAuthGuard in every service until the password is changed.
+    if (user.mustChangePassword) {
+      payload.mustChangePassword = true;
     }
 
     return this.jwtService.sign(payload);

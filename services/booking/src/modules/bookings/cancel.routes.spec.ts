@@ -26,7 +26,7 @@ describe('POST /bookings/:bookingRef/cancel (real cancel service)', () => {
     update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const bookingRepo = {
-    findOne: jest.fn(async () => ({
+    findOneOrFail: jest.fn(async () => ({
       ...stored,
       seats: [
         { seatId: 10, seatCode: 'A1', seatType: 'STANDARD', priceCents: 1000 },

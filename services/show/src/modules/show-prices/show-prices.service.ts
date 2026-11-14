@@ -130,8 +130,13 @@ export class ShowPricesService {
   /** Verifies that the screen belongs to the theatre. */
   private async verifyScreenOwnership(
     screenId: number,
-    theatreId: number,
+    theatreId: number | undefined,
   ): Promise<void> {
+    // A theatre admin token without a theatre assignment can own nothing.
+    if (theatreId === undefined) {
+      throwError('FORBIDDEN', 'No theatre assignment found');
+    }
+
     // An outage throws SERVICE_UNAVAILABLE from the client itself.
     const screen = await this.theatreClient.getScreen(screenId);
 

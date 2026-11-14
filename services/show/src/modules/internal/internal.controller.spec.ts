@@ -15,6 +15,7 @@ describe('InternalController routes', () => {
     getShowIdsByScreens: jest.fn().mockResolvedValue([101, 102]),
     getShowById: jest.fn().mockResolvedValue({ id: 5 }),
     getPricesByShowId: jest.fn().mockResolvedValue([]),
+    hasFutureShows: jest.fn().mockResolvedValue({ exists: false }),
   };
 
   // Every request carries the internal key; requests without it are tested separately.
@@ -91,4 +92,31 @@ describe('InternalController routes', () => {
       expect(internalService.getShowIdsByScreens).not.toHaveBeenCalled();
     },
   );
+
+  describe('GET /internal/shows/exists-future', () => {
+    it('resolves to its own handler, not to shows/:id', async () => {
+      const res = await get('/internal/shows/exists-future?screenIds=4,2,4');
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ exists: false });
+      expect(internalService.hasFutureShows).toHaveBeenCalledWith([4, 2]);
+      expect(internalService.getShowById).not.toHaveBeenCalled();
+    });
+
+    it.each(['', '?screenIds=', '?screenIds=0', '?screenIds=a'])(
+      'returns 400 for screenIds "%s"',
+      async (query) => {
+        const res = await get(`/internal/shows/exists-future${query}`);
+        expect(res.status).toBe(400);
+        expect(internalService.hasFutureShows).not.toHaveBeenCalled();
+      },
+    );
+
+    it('returns 401 without the internal key', async () => {
+      const res = await fetch(
+        `${baseUrl}/internal/shows/exists-future?screenIds=1`,
+      );
+      expect(res.status).toBe(401);
+    });
+  });
 });

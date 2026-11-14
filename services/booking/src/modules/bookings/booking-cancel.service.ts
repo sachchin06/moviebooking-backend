@@ -76,7 +76,7 @@ export class BookingCancelService {
         this.logger.error(`Failed to publish booking.failed: ${err.message}`);
       });
 
-    return this.bookingRepo.findOne({
+    return this.bookingRepo.findOneOrFail({
       where: { id: cancelled.id },
       relations: ['seats', 'holds'],
     });

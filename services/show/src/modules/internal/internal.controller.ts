@@ -34,6 +34,16 @@ export class InternalController {
     return this.internalService.getShowIdsByScreens(screenIds);
   }
 
+  @Get('shows/exists-future')
+  @ApiOperation({
+    summary: 'Whether any of the screens has a future ACTIVE show (internal)',
+  })
+  async hasFutureShows(
+    @Query('screenIds', new ParseIdListPipe('screenIds')) screenIds: number[],
+  ) {
+    return this.internalService.hasFutureShows(screenIds);
+  }
+
   @Get('shows/:id')
   @ApiOperation({ summary: 'Get show by ID (internal)' })
   async getShowById(@Param('id', ParseIntPipe) id: number) {

@@ -40,6 +40,11 @@ export const ERRORS = {
     message: 'Access denied',
     status: HttpStatus.FORBIDDEN,
   },
+  PASSWORD_CHANGE_REQUIRED: {
+    code: 'PASSWORD_CHANGE_REQUIRED',
+    message: 'You must change your temporary password before continuing',
+    status: HttpStatus.FORBIDDEN,
+  },
   UNAUTHORIZED: {
     code: 'UNAUTHORIZED',
     message: 'Authentication required',
@@ -55,6 +60,11 @@ export const ERRORS = {
   DUPLICATE_RESOURCE: {
     code: 'DUPLICATE_RESOURCE',
     message: 'Resource already exists',
+    status: HttpStatus.CONFLICT,
+  },
+  CONFLICT: {
+    code: 'CONFLICT',
+    message: 'The request conflicts with the current state of the resource',
     status: HttpStatus.CONFLICT,
   },
 

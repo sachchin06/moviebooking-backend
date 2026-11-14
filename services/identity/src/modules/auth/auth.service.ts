@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { User, UserStatus } from '../../entities';
 import {
   throwError,
@@ -14,6 +15,16 @@ import {
 import { TheatreClient } from '../../clients/theatre.client';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { parseDurationToSeconds } from './token-lifetime';
+
+/**
+ * bcrypt hash (12 rounds, like real passwords) of a random value nobody knows. Used
+ * when the email is unknown so the comparison still costs the same time.
+ */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
+  randomBytes(32).toString('hex'),
+  12,
+);
 
 export interface RoleResponse {
   id: string;
@@ -48,13 +59,26 @@ export interface ProfileResponse {
 
 @Injectable()
 export class AuthService {
+  /** Access and refresh token lifetimes from JWT config, in seconds. */
+  private readonly accessTokenTtlSeconds: number;
+  private readonly refreshTokenTtlSeconds: number;
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly theatreClient: TheatreClient,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.accessTokenTtlSeconds = parseDurationToSeconds(
+      'JWT_EXPIRES_IN',
+      configService.get<string>('JWT_EXPIRES_IN', '1h'),
+    );
+    this.refreshTokenTtlSeconds = parseDurationToSeconds(
+      'JWT_REFRESH_EXPIRES_IN',
+      configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
+    );
+  }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
@@ -65,18 +89,17 @@ export class AuthService {
       relations: ['role'],
     });
 
-    if (!user) {
-      throwError('INVALID_CREDENTIALS');
-    }
+    // Always run one bcrypt comparison, even for an unknown email, so response
+    // time does not reveal which emails have accounts.
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+    );
 
-    // Check if user is active
-    if (user.status !== UserStatus.ACTIVE) {
-      throwError('INVALID_CREDENTIALS', 'Account is disabled');
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
+    // Unknown email, wrong password and disabled account all get the same generic
+    // error, and the account status is only considered after a correct password,
+    // so the response never confirms that an account exists or is disabled.
+    if (!user || !isPasswordValid || user.status !== UserStatus.ACTIVE) {
       throwError('INVALID_CREDENTIALS');
     }
 
@@ -161,7 +184,11 @@ export class AuthService {
 
     await this.userRepository.save(user);
 
-    return { message: 'Password changed successfully' };
+    // Tokens issued before the change still carry mustChangePassword; the client
+    // calls /auth/refresh to get an access token without it.
+    return {
+      message: 'Password changed successfully. Refresh your token to continue.',
+    };
   }
 
   async getProfile(userId: number) {
@@ -202,14 +229,14 @@ export class AuthService {
       { sub: user.id },
       {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get('JWT_REFRESH_EXPIRES_IN', '7d'),
+        expiresIn: this.refreshTokenTtlSeconds,
       },
     );
 
     return {
       accessToken,
       refreshToken,
-      expiresIn: 3600,
+      expiresIn: this.accessTokenTtlSeconds,
     };
   }
 
@@ -244,7 +271,7 @@ export class AuthService {
 
     return {
       accessToken,
-      expiresIn: 3600,
+      expiresIn: this.accessTokenTtlSeconds,
     };
   }
 
@@ -268,6 +295,13 @@ export class AuthService {
       payload.theatreId = theatreId;
     }
 
-    return this.jwtService.sign(payload);
+    // Enforced by JwtAuthGuard in every service until the password is changed.
+    if (user.mustChangePassword) {
+      payload.mustChangePassword = true;
+    }
+
+    return this.jwtService.sign(payload, {
+      expiresIn: this.accessTokenTtlSeconds,
+    });
   }
 }

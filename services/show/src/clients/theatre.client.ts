@@ -56,6 +56,14 @@ export class TheatreClient extends BaseServiceClient {
     return result ?? [];
   }
 
+  /** IDs of every screen (inactive included) in a theatre. Throws SERVICE_UNAVAILABLE if the service is down. */
+  async getScreenIdsByTheatre(theatreId: number): Promise<number[]> {
+    const result = await this.get<number[]>(
+      `/api/internal/theatres/${theatreId}/screens`,
+    );
+    return result ?? [];
+  }
+
   /** Fetches a theatre by ID. Returns null if not found; throws SERVICE_UNAVAILABLE if the service is down. */
   async getTheatre(theatreId: number): Promise<TheatreDto | null> {
     return this.get<TheatreDto>(`/api/internal/theatres/${theatreId}`);

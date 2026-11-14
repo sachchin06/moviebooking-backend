@@ -8,4 +8,6 @@ export interface ICurrentUser {
     name: string;
   };
   theatreId?: number;
+  /** Set while the user still has to replace a temporary password. */
+  mustChangePassword?: boolean;
 }

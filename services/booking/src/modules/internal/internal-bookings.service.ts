@@ -1,7 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Booking } from '../../entities';
+import { In, Repository } from 'typeorm';
+import { Booking, BookingStatus } from '../../entities';
+
+/** Statuses that hold, or may still hold, seats for a show. */
+export const LIVE_BOOKING_STATUSES = [
+  BookingStatus.HOLDING,
+  BookingStatus.PAYMENT_PENDING,
+  BookingStatus.CONFIRMED,
+  BookingStatus.PENDING_REVIEW,
+];
 import { throwError } from '@moviebooking/common';
 import { mapReservationTiming } from '../bookings/reservation-timing.mapper';
 
@@ -12,6 +20,14 @@ export class InternalBookingsService {
     @InjectRepository(Booking)
     private readonly bookingRepository: Repository<Booking>,
   ) {}
+
+  /** Whether any live booking exists for the show. */
+  async existsForShow(showId: number): Promise<{ exists: boolean }> {
+    const exists = await this.bookingRepository.exists({
+      where: { showId, status: In(LIVE_BOOKING_STATUSES) },
+    });
+    return { exists };
+  }
 
   /** Returns raw booking data for Payment Service. */
   async getByReference(bookingRef: string) {

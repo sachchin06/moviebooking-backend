@@ -7,6 +7,7 @@ import { TheatreClientModule } from '../../clients/theatre-client.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { parseDurationToSeconds } from './token-lifetime';
 import { User, Role } from '../../entities';
 
 @Module({
@@ -20,7 +21,10 @@ import { User, Role } from '../../entities';
       useFactory: (configService: ConfigService) => ({
         secret: configService.get('JWT_SECRET', ''),
         signOptions: {
-          expiresIn: configService.get('JWT_EXPIRES_IN', '1h'),
+          expiresIn: parseDurationToSeconds(
+            'JWT_EXPIRES_IN',
+            configService.get<string>('JWT_EXPIRES_IN', '1h'),
+          ),
         },
       }),
     }),

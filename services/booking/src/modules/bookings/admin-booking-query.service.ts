@@ -4,7 +4,6 @@ import { Booking } from '@moviebooking/database';
 import {
   decryptId,
   encryptId,
-  formatUtcDateTime,
   ICurrentUser,
   PaginatedResponse,
   ROLES,
@@ -184,8 +183,8 @@ export class AdminBookingQueryService {
       totalAmountCents: booking.totalAmountCents,
       currency: booking.currency,
       needsReviewReason: booking.needsReviewReason,
-      createdAt: formatUtcDateTime(booking.createdAt),
-      updatedAt: formatUtcDateTime(booking.updatedAt),
+      createdAt: booking.createdAt.toISOString(),
+      updatedAt: booking.updatedAt.toISOString(),
       ...mapReservationTiming(booking),
     };
   }
@@ -231,7 +230,7 @@ export class AdminBookingQueryService {
       status: booking.status,
       totalAmountCents: booking.totalAmountCents,
       currency: booking.currency,
-      createdAt: formatUtcDateTime(booking.createdAt),
+      createdAt: booking.createdAt.toISOString(),
       ...mapReservationTiming(booking, now),
     };
   }

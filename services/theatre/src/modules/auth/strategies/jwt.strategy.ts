@@ -15,6 +15,7 @@ interface JwtPayload {
     name: string;
   };
   theatreId?: number;
+  mustChangePassword?: boolean;
 }
 
 @Injectable()
@@ -40,6 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       name: payload.name,
       role: payload.role,
       theatreId: payload.theatreId,
+      mustChangePassword: payload.mustChangePassword === true,
     };
   }
 }

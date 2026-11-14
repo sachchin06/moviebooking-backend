@@ -1,9 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  Brackets,
+  DataSource,
+  EntityManager,
+  In,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { Show, ShowPrice, ShowStatus } from '../../entities';
 import {
   throwError,
+  canSeeInactiveEverywhere,
   ICurrentUser,
   encryptId,
   decryptId,
@@ -103,11 +111,8 @@ export class ShowsService {
 
     const qb = this.showRepository.createQueryBuilder('show');
 
-    // Guest: ACTIVE only; authenticated: all or filtered by status
-    if (!user) {
-      qb.where('show.status = :status', { status: ShowStatus.ACTIVE });
-    } else if (status) {
-      qb.where('show.status = :status', { status });
+    if (!(await this.applyListVisibility(qb, status, user))) {
+      return new PaginatedResponse([], 0, page, pageSize);
     }
 
     if (decryptedMovieId) {
@@ -195,8 +200,11 @@ export class ShowsService {
       throwError('NOT_FOUND', 'Show not found');
     }
 
-    // Guest: only ACTIVE
-    if (!user && show.status !== ShowStatus.ACTIVE) {
+    // Inactive shows: SUPER_ADMIN/STAFF always, a THEATRE_ADMIN only for their own
+    // theatre (checked once the screen is known below), nobody else.
+    const isInactive = show.status !== ShowStatus.ACTIVE;
+    const isTheatreAdmin = user?.role?.code === ROLES.THEATRE_ADMIN;
+    if (isInactive && !canSeeInactiveEverywhere(user) && !isTheatreAdmin) {
       throwError('NOT_FOUND', 'Show not found');
     }
 
@@ -206,6 +214,14 @@ export class ShowsService {
       this.theatreClient.getScreen(show.screenId),
       this.showPriceRepository.find({ where: { showId: show.id } }),
     ]);
+
+    if (
+      isInactive &&
+      !canSeeInactiveEverywhere(user) &&
+      (user?.theatreId === undefined || screen?.theatreId !== user.theatreId)
+    ) {
+      throwError('NOT_FOUND', 'Show not found');
+    }
 
     const theatre = screen
       ? await this.theatreClient.getTheatre(screen.theatreId)
@@ -290,6 +306,56 @@ export class ShowsService {
   }
 
   // Private Helper Methods
+
+  /**
+   * Applies business rule 4 to a show list query. Returns false when the caller can
+   * see nothing for the requested status (the caller then returns an empty page).
+   * - SUPER_ADMIN, STAFF: every show, optionally filtered by status
+   * - THEATRE_ADMIN: ACTIVE shows everywhere plus INACTIVE shows of their theatre
+   * - everyone else: ACTIVE shows only
+   */
+  private async applyListVisibility(
+    qb: SelectQueryBuilder<Show>,
+    status: ShowStatus | undefined,
+    user?: ICurrentUser,
+  ): Promise<boolean> {
+    if (canSeeInactiveEverywhere(user)) {
+      if (status) {
+        qb.where('show.status = :status', { status });
+      }
+      return true;
+    }
+
+    const ownScreenIds =
+      user?.role?.code === ROLES.THEATRE_ADMIN && user.theatreId !== undefined
+        ? await this.theatreClient.getScreenIdsByTheatre(user.theatreId)
+        : [];
+
+    if (status === ShowStatus.INACTIVE) {
+      if (ownScreenIds.length === 0) {
+        return false;
+      }
+      qb.where('show.status = :status', { status }).andWhere(
+        'show.screenId IN (:...ownScreenIds)',
+        { ownScreenIds },
+      );
+      return true;
+    }
+
+    if (status === ShowStatus.ACTIVE || ownScreenIds.length === 0) {
+      qb.where('show.status = :active', { active: ShowStatus.ACTIVE });
+      return true;
+    }
+
+    qb.where(
+      new Brackets((visible) => {
+        visible
+          .where('show.status = :active', { active: ShowStatus.ACTIVE })
+          .orWhere('show.screenId IN (:...ownScreenIds)', { ownScreenIds });
+      }),
+    );
+    return true;
+  }
 
   /**
    * Throws CONFLICT (409) when the show has live bookings. If the Booking Service is

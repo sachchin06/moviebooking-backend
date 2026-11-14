@@ -37,6 +37,7 @@ export * from './utils/nanoid.util';
 export * from './utils/id-cipher.util';
 export * from './utils/date.util';
 export * from './utils/env.util';
+export * from './utils/visibility.util';
 
 // Modules
 export * from './modules/dev/dev.module';

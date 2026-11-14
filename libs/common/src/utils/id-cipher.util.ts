@@ -51,22 +51,24 @@ export function encryptId(id: number): string {
 }
 
 /**
- * Decrypt an obfuscated string back to numeric ID
- * Returns null if decryption fails
+ * Decrypts an obfuscated string back to a numeric ID. Returns null when it fails.
+ *
+ * With encryption enabled, only a genuine ciphertext produced by encryptId() is
+ * accepted: a plain number such as "5" is rejected, otherwise anyone could bypass the
+ * obfuscation and enumerate records by counting.
+ * With encryption disabled (no ID_ENCRYPTION_KEY, e.g. in tests), the value must be a
+ * plain string of digits.
  */
 export function decryptId(encryptedId: string): number | null {
   if (!encryptionKey) {
-    // If encryption disabled, try parsing as plain number
-    const parsed = parseInt(encryptedId, 10);
-    return isNaN(parsed) ? null : parsed;
+    return parseDigits(encryptedId);
   }
 
   try {
     const combined = Buffer.from(encryptedId, 'base64url');
 
     if (combined.length < IV_LENGTH + AUTH_TAG_LENGTH + 1) {
-      const parsed = parseInt(encryptedId, 10);
-      return isNaN(parsed) ? null : parsed;
+      return null;
     }
 
     const iv = combined.subarray(0, IV_LENGTH);
@@ -78,18 +80,24 @@ export function decryptId(encryptedId: string): number | null {
     });
     decipher.setAuthTag(authTag);
 
+    // final() throws if the auth tag does not match (tampered or foreign value).
     const decrypted = Buffer.concat([
       decipher.update(encrypted),
       decipher.final(),
     ]);
 
-    const id = parseInt(decrypted.toString('utf8'), 10);
-    return isNaN(id) ? null : id;
+    return parseDigits(decrypted.toString('utf8'));
   } catch {
-    // Fallback: try parsing as plain number
-    const parsed = parseInt(encryptedId, 10);
-    return isNaN(parsed) ? null : parsed;
+    return null;
   }
+}
+
+/** Parses a string made only of digits; anything else (e.g. "12abc") gives null. */
+function parseDigits(value: string): number | null {
+  if (typeof value !== 'string' || !/^\d{1,15}$/.test(value)) {
+    return null;
+  }
+  return Number(value);
 }
 
 /**

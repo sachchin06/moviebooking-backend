@@ -19,6 +19,7 @@ export * from './interceptors/logging.interceptor';
 export * from './guards/roles.guard';
 export * from './guards/jwt-auth.guard';
 export * from './guards/optional-jwt-auth.guard';
+export * from './guards/internal-api.guard';
 
 // Interfaces
 export * from './interfaces/current-user.interface';
@@ -34,9 +35,13 @@ export * from './exceptions/app.exception';
 export * from './utils/nanoid.util';
 export * from './utils/id-cipher.util';
 export * from './utils/date.util';
+export * from './utils/env.util';
 
 // Modules
 export * from './modules/dev/dev.module';
+
+// Service start-up
+export * from './bootstrap/bootstrap-service';
 
 // Service Clients (inter-service communication)
 export * from './clients/base-service.client';

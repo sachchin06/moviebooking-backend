@@ -65,12 +65,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
         `Database error [${(exception as any).number || 'unknown'}]: ${(exception as Error).message}`,
       );
     }
-    // Handle unknown errors
-    else if (exception instanceof Error) {
-      message = exception.message;
+    // Unknown errors: log everything, return only the generic 500 message.
+    // The real message can expose internals (library errors, SQL, file paths).
+    else {
+      const detail =
+        exception instanceof Error
+          ? `${exception.name}: ${exception.message}`
+          : String(exception);
       this.logger.error(
-        `Unhandled exception: ${exception.message}`,
-        exception.stack,
+        `Unhandled exception on ${request.method} ${request.url}: ${detail}`,
+        exception instanceof Error ? exception.stack : undefined,
       );
     }
 

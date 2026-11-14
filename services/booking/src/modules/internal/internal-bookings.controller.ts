@@ -1,15 +1,16 @@
-import { Controller, Get, Post, Param } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiExcludeEndpoint,
 } from '@nestjs/swagger';
-import { SkipTransform } from '@moviebooking/common';
+import { SkipTransform, InternalApiGuard } from '@moviebooking/common';
 import { InternalBookingsService } from './internal-bookings.service';
 import { InternalTransitionsService } from './internal-transitions.service';
 
 @ApiTags('internal')
+@UseGuards(InternalApiGuard)
 @Controller('internal/bookings')
 export class InternalBookingsController {
   constructor(

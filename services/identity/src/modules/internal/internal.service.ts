@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { throwError } from '@moviebooking/common';
 import { Repository, In } from 'typeorm';
 import { User } from '../../entities';
 
@@ -17,13 +18,14 @@ export class InternalService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  async getUserById(id: number): Promise<InternalUserResponse | null> {
+  /** Throws NOT_FOUND (404) if the user does not exist. */
+  async getUserById(id: number): Promise<InternalUserResponse> {
     const user = await this.userRepository.findOne({
       where: { id },
       relations: ['role'],
     });
 
-    if (!user) return null;
+    if (!user) throwError('NOT_FOUND', 'User not found');
     return this.mapUser(user);
   }
 

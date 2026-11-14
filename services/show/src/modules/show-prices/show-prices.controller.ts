@@ -10,6 +10,7 @@ import {
   OptionalJwtAuthGuard,
   RolesGuard,
   Roles,
+  ROLES,
   CurrentUser,
   ICurrentUser,
   DecryptId,
@@ -33,7 +34,7 @@ export class ShowPricesController {
 
   @Put()
   @UseGuards(JwtAuthGuard, RolesGuard, ShowOwnershipGuard)
-  @Roles('THEATRE_ADMIN', 'SUPER_ADMIN')
+  @Roles(ROLES.THEATRE_ADMIN, ROLES.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set/update pricing for a show (Theatre Admin)' })
   async setPrices(

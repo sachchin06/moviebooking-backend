@@ -34,12 +34,12 @@ export class TheatreClient extends BaseServiceClient {
     super(httpService, 'TheatreClient');
   }
 
-  /** Fetches a screen by ID. Returns null if not found or service unavailable. */
+  /** Fetches a screen by ID. Returns null if not found; throws SERVICE_UNAVAILABLE if the service is down. */
   async getScreen(screenId: number): Promise<ScreenDto | null> {
     return this.get<ScreenDto>(`/api/internal/screens/${screenId}`);
   }
 
-  /** Fetches multiple screens in a single call. Returns empty array on failure. */
+  /** Fetches multiple screens in a single call. Throws SERVICE_UNAVAILABLE if the service is down. */
   async getScreensByIds(screenIds: number[]): Promise<ScreenDto[]> {
     if (!screenIds.length) return [];
     const result = await this.post<ScreenDto[]>('/api/internal/screens/batch', {
@@ -56,12 +56,12 @@ export class TheatreClient extends BaseServiceClient {
     return result ?? [];
   }
 
-  /** Fetches a theatre by ID. Returns null if not found or service unavailable. */
+  /** Fetches a theatre by ID. Returns null if not found; throws SERVICE_UNAVAILABLE if the service is down. */
   async getTheatre(theatreId: number): Promise<TheatreDto | null> {
     return this.get<TheatreDto>(`/api/internal/theatres/${theatreId}`);
   }
 
-  /** Fetches multiple theatres in a single call. Returns empty array on failure. */
+  /** Fetches multiple theatres in a single call. Throws SERVICE_UNAVAILABLE if the service is down. */
   async getTheatresByIds(theatreIds: number[]): Promise<TheatreDto[]> {
     if (!theatreIds.length) return [];
     const result = await this.post<TheatreDto[]>(

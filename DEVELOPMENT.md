@@ -20,7 +20,7 @@ After changing anything under `libs/`, run `npm run build:libs` again before sta
 
 ```bash
 npm ci
-cp .env.example .env        # then fill in the secrets (DB_PASSWORD, JWT_*, ID_ENCRYPTION_KEY, ADMIN_*)
+cp .env.example .env        # then fill in the secrets (DB_PASSWORD, JWT_*, ID_ENCRYPTION_KEY, INTERNAL_API_KEY, ADMIN_*)
 docker compose up -d        # RabbitMQ and Redis (SQL Server runs locally, not in compose)
 npm run build:libs
 npm run db:migrate

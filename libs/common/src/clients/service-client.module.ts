@@ -1,6 +1,10 @@
 import { DynamicModule, Module, Type } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import {
+  INTERNAL_API_KEY_ENV,
+  INTERNAL_API_KEY_HEADER,
+} from '../guards/internal-api.guard';
 
 interface ServiceClientModuleOptions {
   /** Environment variable name for the service URL (e.g. 'THEATRE_SERVICE_URL') */
@@ -39,6 +43,13 @@ export class ServiceClientModule {
               options.defaultUrl,
             ),
             timeout: options.timeout ?? 2000,
+            // Every call targets an /internal route protected by InternalApiGuard.
+            headers: {
+              [INTERNAL_API_KEY_HEADER]: configService.get<string>(
+                INTERNAL_API_KEY_ENV,
+                '',
+              ),
+            },
           }),
         }),
       ],

@@ -19,6 +19,7 @@ import {
   OptionalJwtAuthGuard,
   RolesGuard,
   Roles,
+  ROLES,
   CurrentUser,
   ICurrentUser,
   DecryptId,
@@ -46,7 +47,7 @@ export class ShowsController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard, ShowOwnershipGuard)
-  @Roles('THEATRE_ADMIN', 'SUPER_ADMIN')
+  @Roles(ROLES.THEATRE_ADMIN, ROLES.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new show (Theatre Admin)' })
   async create(@Body() dto: CreateShowDto, @CurrentUser() user: ICurrentUser) {
@@ -66,7 +67,7 @@ export class ShowsController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard, ShowOwnershipGuard)
-  @Roles('THEATRE_ADMIN', 'SUPER_ADMIN')
+  @Roles(ROLES.THEATRE_ADMIN, ROLES.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update show (Theatre Admin)' })
   @ApiParam({ name: 'id', type: String, description: 'Encrypted show ID' })
@@ -80,7 +81,7 @@ export class ShowsController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard, ShowOwnershipGuard)
-  @Roles('THEATRE_ADMIN', 'SUPER_ADMIN')
+  @Roles(ROLES.THEATRE_ADMIN, ROLES.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete show (Theatre Admin)' })
   @ApiParam({ name: 'id', type: String, description: 'Encrypted show ID' })

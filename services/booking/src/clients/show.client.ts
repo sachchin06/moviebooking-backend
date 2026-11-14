@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { BookingServiceClient } from './booking-service-client.base';
+import { BaseServiceClient } from '@moviebooking/common';
 
 /** Raw show shape returned by Show Service `GET /api/internal/shows/:id`. */
 export interface ShowDto {
@@ -23,25 +23,25 @@ export interface PriceDto {
 
 /** Calls the Show Service internal APIs. Returns null when a show is missing; throws if the service is down. */
 @Injectable()
-export class ShowClient extends BookingServiceClient {
+export class ShowClient extends BaseServiceClient {
   constructor(httpService: HttpService) {
     super(httpService, 'ShowClient');
   }
 
   /** Fetches a show by ID. Returns null if the show does not exist. */
   getShow(showId: number): Promise<ShowDto | null> {
-    return this.getOrNull<ShowDto>(`/api/internal/shows/${showId}`);
+    return this.get<ShowDto>(`/api/internal/shows/${showId}`);
   }
 
   /** Fetches per-seat-type prices for a show. Returns null if the show does not exist. */
   getPrices(showId: number): Promise<PriceDto[] | null> {
-    return this.getOrNull<PriceDto[]>(`/api/internal/shows/${showId}/prices`);
+    return this.get<PriceDto[]>(`/api/internal/shows/${showId}/prices`);
   }
 
   /** Resolves the show IDs scheduled on the given screens, for admin theatre scoping. */
   async getShowIdsByScreens(screenIds: number[]): Promise<number[]> {
     if (!screenIds.length) return [];
-    const result = await this.getOrNull<number[]>(
+    const result = await this.get<number[]>(
       `/api/internal/shows/by-screens?screenIds=${screenIds.join(',')}`,
     );
     return result ?? [];

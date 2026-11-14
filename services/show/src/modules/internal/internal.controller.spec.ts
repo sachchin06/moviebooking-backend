@@ -17,7 +17,13 @@ describe('InternalController routes', () => {
     getPricesByShowId: jest.fn().mockResolvedValue([]),
   };
 
+  // Every request carries the internal key; requests without it are tested separately.
+  const KEY = 'test-internal-key';
+  const get = (path: string) =>
+    fetch(`${baseUrl}${path}`, { headers: { 'X-Internal-Key': KEY } });
+
   beforeAll(async () => {
+    process.env.INTERNAL_API_KEY = KEY;
     const moduleRef = await Test.createTestingModule({
       controllers: [InternalController],
       providers: [{ provide: InternalService, useValue: internalService }],
@@ -31,14 +37,13 @@ describe('InternalController routes', () => {
 
   afterAll(async () => {
     await app.close();
+    delete process.env.INTERNAL_API_KEY;
   });
 
   beforeEach(() => jest.clearAllMocks());
 
   it('resolves GET /internal/shows/by-screens to the by-screens handler', async () => {
-    const res = await fetch(
-      `${baseUrl}/internal/shows/by-screens?screenIds=3,1,3`,
-    );
+    const res = await get('/internal/shows/by-screens?screenIds=3,1,3');
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([101, 102]);
@@ -54,7 +59,7 @@ describe('InternalController routes', () => {
     ['negative', '?screenIds=-4'],
     ['decimal', '?screenIds=1.5'],
   ])('returns 400 for %s screenIds', async (_label, query) => {
-    const res = await fetch(`${baseUrl}/internal/shows/by-screens${query}`);
+    const res = await get(`/internal/shows/by-screens${query}`);
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };
@@ -63,9 +68,27 @@ describe('InternalController routes', () => {
   });
 
   it('still resolves GET /internal/shows/:id', async () => {
-    const res = await fetch(`${baseUrl}/internal/shows/5`);
+    const res = await get('/internal/shows/5');
 
     expect(res.status).toBe(200);
     expect(internalService.getShowById).toHaveBeenCalledWith(5);
   });
+
+  it.each([
+    ['no key', {}],
+    ['a wrong key', { 'X-Internal-Key': 'wrong' }],
+  ])(
+    'returns 401 with %s and never calls the service',
+    async (_label, headers) => {
+      for (const path of [
+        '/internal/shows/5',
+        '/internal/shows/by-screens?screenIds=1',
+      ]) {
+        const res = await fetch(`${baseUrl}${path}`, { headers });
+        expect(res.status).toBe(401);
+      }
+      expect(internalService.getShowById).not.toHaveBeenCalled();
+      expect(internalService.getShowIdsByScreens).not.toHaveBeenCalled();
+    },
+  );
 });

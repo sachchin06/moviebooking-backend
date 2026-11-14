@@ -10,6 +10,7 @@ import {
 } from '@moviebooking/common';
 import { CreateScreenDto } from './dto/create-screen.dto';
 import { UpdateScreenDto } from './dto/update-screen.dto';
+import { ShowClient } from '../../clients/show.client';
 import { ListScreensQueryDto } from './dto/list-screens-query.dto';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class ScreensService {
     private readonly theatreRepository: Repository<Theatre>,
     @InjectRepository(Seat)
     private readonly seatRepository: Repository<Seat>,
+    private readonly showClient: ShowClient,
   ) {}
 
   async create(theatreId: number, dto: CreateScreenDto) {
@@ -120,6 +122,13 @@ export class ScreensService {
       throwError('NOT_FOUND', 'Screen not found');
     }
 
+    if (
+      dto.status === ScreenStatus.INACTIVE &&
+      screen.status !== ScreenStatus.INACTIVE
+    ) {
+      await this.assertNoFutureShows(screen.id);
+    }
+
     Object.assign(screen, dto);
     const updated = await this.screenRepository.save(screen);
     return this.mapResponse(updated);
@@ -134,11 +143,24 @@ export class ScreensService {
       throwError('NOT_FOUND', 'Screen not found');
     }
 
-    // TODO: refuse while the screen has future shows (needs a Show Service lookup)
+    await this.assertNoFutureShows(screen.id);
     screen.status = ScreenStatus.INACTIVE;
     await this.screenRepository.save(screen);
 
     return this.mapResponse(screen);
+  }
+
+  /**
+   * Refuses (409) to deactivate a screen that still has future ACTIVE shows. If the
+   * Show Service is down the client throws SERVICE_UNAVAILABLE (503) instead.
+   */
+  private async assertNoFutureShows(screenId: number): Promise<void> {
+    if (await this.showClient.hasFutureShows([screenId])) {
+      throwError(
+        'CONFLICT',
+        'Cannot deactivate a screen that has future shows',
+      );
+    }
   }
 
   private mapResponse(screen: Screen) {

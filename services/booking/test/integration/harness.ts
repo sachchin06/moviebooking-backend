@@ -344,8 +344,9 @@ export const api = {
     }),
   cancel: (ctx: TestContext, ref: string, email = 'guest@example.com') =>
     call(ctx, 'POST', `/bookings/${ref}/cancel`, { email }),
+  // Internal routes skip the response envelope: the body is the raw result.
   markPaymentPending: (ctx: TestContext, ref: string) =>
-    call(
+    call<{ status: string }>(
       ctx,
       'POST',
       `/internal/bookings/${ref}/mark-payment-pending`,
@@ -353,7 +354,13 @@ export const api = {
       true,
     ),
   confirm: (ctx: TestContext, ref: string) =>
-    call(ctx, 'POST', `/internal/bookings/${ref}/confirm`, {}, true),
+    call<{ status: string }>(
+      ctx,
+      'POST',
+      `/internal/bookings/${ref}/confirm`,
+      {},
+      true,
+    ),
   availability: (ctx: TestContext) =>
     call<{ seats: { seatCode: string; status: string }[] }>(
       ctx,

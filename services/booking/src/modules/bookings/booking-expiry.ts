@@ -1,11 +1,7 @@
 import { EntityManager } from 'typeorm';
-import {
-  Booking,
-  BookingStatus,
-  SeatHold,
-  SeatHoldStatus,
-} from '@moviebooking/database';
+import { Booking, BookingStatus, SeatHoldStatus } from '@moviebooking/database';
 import { assertTransition } from './booking-state';
+import { settleActiveHolds } from './seat-holds';
 
 /** True when a HOLDING or PAYMENT_PENDING booking has passed its deadline. */
 export function isOverdue(booking: Booking, now: Date): boolean {
@@ -38,10 +34,6 @@ export async function expireLockedBooking(
   booking.status = BookingStatus.EXPIRED;
   await manager.save(Booking, booking);
 
-  await manager.update(
-    SeatHold,
-    { bookingId: booking.id, status: SeatHoldStatus.ACTIVE },
-    { status: SeatHoldStatus.EXPIRED },
-  );
+  await settleActiveHolds(manager, booking.id, SeatHoldStatus.EXPIRED);
   return true;
 }

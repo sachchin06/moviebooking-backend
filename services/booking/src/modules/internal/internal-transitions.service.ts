@@ -14,6 +14,7 @@ import {
   BookingConfirmedEvent,
   BookingEventsPublisher,
 } from '../../messaging/booking-events.publisher';
+import { settleActiveHolds } from '../bookings/seat-holds';
 
 /**
  * Handles internal state transitions for Payment Service.
@@ -144,11 +145,7 @@ export class InternalTransitionsService {
           // The reservation window has passed, so free the seats. Otherwise the
           // filtered unique index on ACTIVE holds would block them indefinitely,
           // because the expiry sweep only handles HOLDING and PAYMENT_PENDING.
-          await manager.update(
-            SeatHold,
-            { bookingId: booking.id, status: SeatHoldStatus.ACTIVE },
-            { status: SeatHoldStatus.RELEASED },
-          );
+          await settleActiveHolds(manager, booking.id, SeatHoldStatus.RELEASED);
           this.logger.warn(
             `Booking ${bookingRef} paid after expiry, marked PENDING_REVIEW`,
           );
@@ -161,11 +158,7 @@ export class InternalTransitionsService {
 
         // CONVERTED keeps the seats inside the filtered unique index, so the database
         // itself refuses any later hold on a sold seat.
-        await manager.update(
-          SeatHold,
-          { bookingId: booking.id, status: SeatHoldStatus.ACTIVE },
-          { status: SeatHoldStatus.CONVERTED },
-        );
+        await settleActiveHolds(manager, booking.id, SeatHoldStatus.CONVERTED);
 
         // Build the event while the seat rows are read under the same lock, so nothing
         // that runs after commit can fail before publishing.
@@ -239,11 +232,7 @@ export class InternalTransitionsService {
         booking.status = BookingStatus.FAILED;
         await manager.save(Booking, booking);
 
-        await manager.update(
-          SeatHold,
-          { bookingId: booking.id, status: SeatHoldStatus.ACTIVE },
-          { status: SeatHoldStatus.RELEASED },
-        );
+        await settleActiveHolds(manager, booking.id, SeatHoldStatus.RELEASED);
 
         return { response: this.mapTimingResponse(booking), failed: booking };
       },

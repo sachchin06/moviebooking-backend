@@ -159,10 +159,12 @@ export class InternalTransitionsService {
         booking.status = BookingStatus.CONFIRMED;
         await manager.save(Booking, booking);
 
+        // CONVERTED keeps the seats inside the filtered unique index, so the database
+        // itself refuses any later hold on a sold seat.
         await manager.update(
           SeatHold,
           { bookingId: booking.id, status: SeatHoldStatus.ACTIVE },
-          { status: SeatHoldStatus.RELEASED },
+          { status: SeatHoldStatus.CONVERTED },
         );
 
         // Build the event while the seat rows are read under the same lock, so nothing

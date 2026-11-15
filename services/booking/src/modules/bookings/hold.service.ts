@@ -193,13 +193,13 @@ export class HoldService {
   ): Promise<void> {
     const seatIds = data.seats.map((s) => s.seatId);
 
+    // A sold seat is one with a CONVERTED hold (its booking was confirmed).
     const soldSeats = await manager
-      .createQueryBuilder(BookingSeat, 'bs')
-      .innerJoin(Booking, 'b', 'b.id = bs.booking_id')
-      .where('bs.show_id = :showId', { showId: data.showId })
-      .andWhere('bs.seat_id IN (:...seatIds)', { seatIds })
-      .andWhere('b.status = :status', { status: BookingStatus.CONFIRMED })
-      .select('bs.seat_id', 'seatId')
+      .createQueryBuilder(SeatHold, 'h')
+      .where('h.show_id = :showId', { showId: data.showId })
+      .andWhere('h.seat_id IN (:...seatIds)', { seatIds })
+      .andWhere('h.status = :status', { status: SeatHoldStatus.CONVERTED })
+      .select('h.seat_id', 'seatId')
       .getRawMany<{ seatId: number }>();
 
     if (soldSeats.length > 0) {

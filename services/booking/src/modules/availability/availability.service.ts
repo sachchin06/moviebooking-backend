@@ -3,10 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { encryptId, throwError } from '@moviebooking/common';
 import {
-  Booking,
-  BookingSeat,
   SeatHold,
-  BookingStatus,
   SeatHoldStatus,
   SeatStatus,
   ShowStatus,
@@ -25,8 +22,6 @@ const DEFAULT_CURRENCY = 'GBP';
 @Injectable()
 export class AvailabilityService {
   constructor(
-    @InjectRepository(BookingSeat)
-    private readonly bookingSeatRepo: Repository<BookingSeat>,
     @InjectRepository(SeatHold)
     private readonly seatHoldRepo: Repository<SeatHold>,
     private readonly showClient: ShowClient,
@@ -66,14 +61,16 @@ export class AvailabilityService {
     };
   }
 
-  /** Seat IDs sold to a CONFIRMED booking for this show. Single batch query. */
+  /**
+   * Seat IDs that are sold: they carry a CONVERTED hold (the booking was confirmed).
+   * The same rows the unique index protects, so the map and the database agree.
+   */
   private async findSoldSeatIds(showId: number): Promise<Set<number>> {
-    const rows = await this.bookingSeatRepo
-      .createQueryBuilder('bs')
-      .innerJoin(Booking, 'b', 'b.id = bs.booking_id')
-      .select('bs.seat_id', 'seatId')
-      .where('bs.show_id = :showId', { showId })
-      .andWhere('b.status = :status', { status: BookingStatus.CONFIRMED })
+    const rows = await this.seatHoldRepo
+      .createQueryBuilder('h')
+      .select('h.seat_id', 'seatId')
+      .where('h.show_id = :showId', { showId })
+      .andWhere('h.status = :status', { status: SeatHoldStatus.CONVERTED })
       .getRawMany<{ seatId: number }>();
     return new Set(rows.map((r) => r.seatId));
   }

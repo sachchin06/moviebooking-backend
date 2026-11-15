@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
-import { Booking, BookingSeat } from '@moviebooking/database';
+import { Booking, SeatHoldStatus } from '@moviebooking/database';
 import { HoldService } from './hold.service';
 import { ShowClient } from '../../clients/show.client';
 import { TheatreClient } from '../../clients/theatre.client';
@@ -51,25 +51,31 @@ interface ManagerOptions {
 
 /** Minimal EntityManager covering what the hold transaction uses. */
 function fakeManager(options: ManagerOptions = {}) {
-  const queryBuilder = (seatIds: number[]) => {
+  // Both checks query seat_holds; the status filter says which one this is:
+  // CONVERTED = sold, ACTIVE = currently held.
+  const queryBuilder = () => {
+    let status: SeatHoldStatus | undefined;
     const qb: Record<string, jest.Mock> = {};
     for (const method of ['innerJoin', 'where', 'andWhere', 'select']) {
-      qb[method] = jest.fn(() => qb);
+      qb[method] = jest.fn(
+        (_clause: string, params?: { status?: SeatHoldStatus }) => {
+          if (params?.status) status = params.status;
+          return qb;
+        },
+      );
     }
-    qb.getRawMany = jest
-      .fn()
-      .mockResolvedValue(seatIds.map((seatId) => ({ seatId })));
+    qb.getRawMany = jest.fn(async () => {
+      const seatIds =
+        status === SeatHoldStatus.CONVERTED
+          ? (options.soldSeatIds ?? [])
+          : (options.heldSeatIds ?? []);
+      return seatIds.map((seatId) => ({ seatId }));
+    });
     return qb;
   };
 
   return {
-    createQueryBuilder: jest.fn((entity: unknown) =>
-      queryBuilder(
-        entity === BookingSeat
-          ? (options.soldSeatIds ?? [])
-          : (options.heldSeatIds ?? []),
-      ),
-    ),
+    createQueryBuilder: jest.fn(() => queryBuilder()),
     create: jest.fn((_entity: unknown, data: object) => ({ ...data })),
     save: jest.fn(async (entity: any) => {
       const isHoldBatch = Array.isArray(entity) && 'expiresAt' in entity[0];

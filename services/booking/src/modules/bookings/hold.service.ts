@@ -21,6 +21,8 @@ import {
   SeatLockService,
 } from '../../redis/seat-lock.service';
 import { BookingRefGenerator } from './booking-ref.generator';
+import { expireLockedBooking } from './booking-expiry';
+import { BookingEventsPublisher } from '../../messaging/booking-events.publisher';
 import { HoldSeatsDto } from './dto/hold-seats.dto';
 
 /** Validated seat data prepared for hold transaction. */
@@ -67,6 +69,7 @@ export class HoldService {
     private readonly theatreClient: TheatreClient,
     private readonly seatLockService: SeatLockService,
     private readonly bookingRefGenerator: BookingRefGenerator,
+    private readonly eventsPublisher: BookingEventsPublisher,
   ) {
     this.maxSeatsPerBooking = this.configService.get<number>(
       'MAX_SEATS_PER_BOOKING',
@@ -119,9 +122,11 @@ export class HoldService {
     data: ValidatedHoldData,
   ): Promise<Booking> {
     let bookingId: number;
+    let reclaimed: Booking[] = [];
 
     try {
       bookingId = await this.dataSource.transaction(async (manager) => {
+        reclaimed = await this.reclaimStaleHolds(manager, data);
         await this.assertSeatsStillFree(manager, data);
 
         const bookingRef =
@@ -180,10 +185,80 @@ export class HoldService {
       throw error;
     }
 
+    this.publishExpired(reclaimed);
+
     return this.bookingRepo.findOneOrFail({
       where: { id: bookingId },
       relations: ['seats', 'holds'],
     });
+  }
+
+  /**
+   * Frees the requested seats from holds whose time is up, so an expired seat can be
+   * held at once instead of waiting up to a minute for the sweep. Runs inside the hold
+   * transaction, before the free-seat checks.
+   *
+   * Lock ordering (why this cannot deadlock):
+   * 1. Redis seat locks are already held, taken in ascending seat ID order.
+   * 2. In the database, the bookings that own the stale holds are row-locked one by
+   *    one in ascending booking ID order. Two hold requests reclaiming overlapping
+   *    bookings therefore always lock them in the same order, so neither can hold a
+   *    lock the other is waiting for.
+   * 3. Every other writer (confirm, cancel, fail, sweep) locks a single booking row
+   *    and only then updates that booking's holds. This method follows the same
+   *    order, booking row first and its holds second, so it cannot form a cycle
+   *    with them either.
+   * The initial read of seat_holds takes no lasting locks (READ COMMITTED), and each
+   * booking is re-checked under its lock because a payment may have arrived since.
+   */
+  private async reclaimStaleHolds(
+    manager: EntityManager,
+    data: ValidatedHoldData,
+  ): Promise<Booking[]> {
+    const now = new Date();
+    const rows = await manager
+      .createQueryBuilder(SeatHold, 'h')
+      .select('DISTINCT h.booking_id', 'bookingId')
+      .where('h.show_id = :showId', { showId: data.showId })
+      .andWhere('h.seat_id IN (:...seatIds)', {
+        seatIds: data.seats.map((s) => s.seatId),
+      })
+      .andWhere('h.status = :status', { status: SeatHoldStatus.ACTIVE })
+      .andWhere('h.expires_at <= :now', { now })
+      .getRawMany<{ bookingId: number }>();
+
+    const bookingIds = [...new Set(rows.map((r) => Number(r.bookingId)))].sort(
+      (a, b) => a - b,
+    );
+
+    const expired: Booking[] = [];
+    for (const id of bookingIds) {
+      const booking = await manager.findOne(Booking, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (booking && (await expireLockedBooking(manager, booking, now))) {
+        expired.push(booking);
+      }
+    }
+    return expired;
+  }
+
+  /** booking.expired for reclaimed bookings, after commit; failures are only logged. */
+  private publishExpired(bookings: Booking[]): void {
+    for (const booking of bookings) {
+      this.logger.log(`Reclaimed expired booking ${booking.bookingRef}`);
+      this.eventsPublisher
+        .publishExpired({
+          bookingRef: booking.bookingRef,
+          showId: booking.showId,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to publish booking.expired: ${err.message}`,
+          ),
+        );
+    }
   }
 
   /** Re-checks inside the transaction that no requested seat is sold or actively held. */

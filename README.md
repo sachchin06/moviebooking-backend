@@ -7,7 +7,7 @@ A NestJS microservices backend for booking cinema seats, built so that one seat 
 
 ## Overview
 
-Theatre staff set up theatres, screens, seats, movies and shows; guests pick seats and hold them while they pay. Five NestJS services share one SQL Server database, use Redis for seat locks and publish booking events to RabbitMQ. The interesting part is concurrency: many guests can ask for the same seat at the same moment, through any service instance, while Redis may be down. A unique index in the database makes a second live claim on a seat impossible, and integration tests against real SQL Server, Redis and RabbitMQ prove it under load.
+Theatre staff set up theatres, screens, seats, movies and shows; guests pick seats and hold them while they pay. Five NestJS services share one SQL Server database, use Redis for seat locks and publish booking events to RabbitMQ. The interesting part is concurrency: many guests can ask for the same seat at the same moment, from any number of service instances, while Redis may be down. A unique index in the database makes a second live claim on a seat impossible, and integration tests against real SQL Server, Redis and RabbitMQ prove it under concurrent requests.
 
 ## Architecture
 
@@ -202,6 +202,10 @@ CI runs lint, type-check and unit tests with coverage on every pull request and 
 ## Roadmap
 
 Payment, a transactional outbox, notifications, auth hardening and the rest are planned in [ROADMAP.md](ROADMAP.md).
+
+## How this was built
+
+I used Claude Code as a coding assistant and Claude for drafting documentation. I directed the work, reviewed every change and made the design decisions. Every change went through tests and CI, and I can explain the reasoning behind each one.
 
 ## Licence
 

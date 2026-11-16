@@ -1,0 +1,1609 @@
+{
+	"info": {
+		"_postman_id": "moviebooking-backend-collection",
+		"name": "Movie Ticket Booking System",
+		"description": "Complete API collection for the Movie Ticket Booking microservices backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{access_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "identity_url",
+			"value": "http://localhost:3001/api"
+		},
+		{
+			"key": "theatre_url",
+			"value": "http://localhost:3002/api"
+		},
+		{
+			"key": "movie_url",
+			"value": "http://localhost:3003/api"
+		},
+		{
+			"key": "show_url",
+			"value": "http://localhost:3004/api"
+		},
+		{
+			"key": "booking_url",
+			"value": "http://localhost:3005/api"
+		},
+		{
+			"key": "access_token",
+			"value": ""
+		},
+		{
+			"key": "refresh_token",
+			"value": ""
+		},
+		{
+			"key": "theatre_id",
+			"value": ""
+		},
+		{
+			"key": "screen_id",
+			"value": ""
+		},
+		{
+			"key": "movie_id",
+			"value": ""
+		},
+		{
+			"key": "show_id",
+			"value": ""
+		},
+		{
+			"key": "user_id",
+			"value": ""
+		},
+		{
+			"key": "seat_id",
+			"value": ""
+		},
+		{
+			"key": "booking_ref",
+			"value": ""
+		},
+		{
+			"key": "admin_email",
+			"value": "admin@example.com",
+			"type": "string"
+		},
+		{
+			"key": "admin_password",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "new_password",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "internal_api_key",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "1. Identity Service",
+			"item": [
+				{
+					"name": "Auth",
+					"item": [
+						{
+							"name": "Login",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"var jsonData = pm.response.json();",
+											"if (jsonData.data && jsonData.data.accessToken) {",
+											"    pm.collectionVariables.set('access_token', jsonData.data.accessToken);",
+											"    pm.collectionVariables.set('refresh_token', jsonData.data.refreshToken);",
+											"}"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{identity_url}}/auth/login",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"auth",
+										"login"
+									]
+								}
+							}
+						},
+						{
+							"name": "Refresh Token",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{identity_url}}/auth/refresh",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"auth",
+										"refresh"
+									]
+								}
+							}
+						},
+						{
+							"name": "Logout",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{identity_url}}/auth/logout",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"auth",
+										"logout"
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Profile (Me)",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{identity_url}}/auth/me",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"auth",
+										"me"
+									]
+								}
+							}
+						},
+						{
+							"name": "Change Password",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"currentPassword\": \"{{admin_password}}\",\n  \"newPassword\": \"{{new_password}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{identity_url}}/auth/password",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"auth",
+										"password"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Users",
+					"item": [
+						{
+							"name": "List Users",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{identity_url}}/users?page=1&pageSize=20",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"users"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "20"
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Create User",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"roleId\": 3\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{identity_url}}/users",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"users"
+									]
+								}
+							}
+						},
+						{
+							"name": "Get User by ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{identity_url}}/users/{{user_id}}",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"users",
+										"{{user_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Update User",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"John Updated\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{identity_url}}/users/{{user_id}}",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"users",
+										"{{user_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Reset User Password",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"url": {
+									"raw": "{{identity_url}}/users/{{user_id}}/password",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"users",
+										"{{user_id}}",
+										"password"
+									]
+								}
+							}
+						},
+						{
+							"name": "Update User Status",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"DISABLED\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{identity_url}}/users/{{user_id}}/status",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"users",
+										"{{user_id}}",
+										"status"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Roles",
+					"item": [
+						{
+							"name": "List Roles",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{identity_url}}/roles",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"roles"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Internal",
+					"item": [
+						{
+							"name": "Get User by ID (Internal)",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-Internal-Key",
+										"value": "{{internal_api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{identity_url}}/internal/users/1",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"internal",
+										"users",
+										"1"
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Users Batch (Internal)",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-Internal-Key",
+										"value": "{{internal_api_key}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"userIds\": [1, 2, 3]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{identity_url}}/internal/users/batch",
+									"host": [
+										"{{identity_url}}"
+									],
+									"path": [
+										"internal",
+										"users",
+										"batch"
+									]
+								}
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "2. Theatre Service",
+			"item": [
+				{
+					"name": "Theatres",
+					"item": [
+						{
+							"name": "Create Theatre",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Odeon Leicester Square\",\n  \"city\": \"London\",\n  \"address\": \"24-26 Leicester Square\",\n  \"contactNumber\": \"+44 20 7930 6111\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatres",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres"
+									]
+								}
+							}
+						},
+						{
+							"name": "List Theatres",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres?page=1&pageSize=20",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "20"
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Theatre",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Update Theatre",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Odeon Updated\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Delete Theatre",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Theatre Admins",
+					"item": [
+						{
+							"name": "Assign Theatre Admin",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"theatreId\": \"{{theatre_id}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatre-admins",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatre-admins"
+									]
+								}
+							}
+						},
+						{
+							"name": "List Theatre Admins",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatre-admins?page=1&pageSize=20",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatre-admins"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "20"
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Update Admin Status",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"DISABLED\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatre-admins/{{user_id}}/status",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatre-admins",
+										"{{user_id}}",
+										"status"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Screens",
+					"item": [
+						{
+							"name": "Create Screen",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Screen 1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens"
+									]
+								}
+							}
+						},
+						{
+							"name": "List Screens",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens?page=1&pageSize=20",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "20"
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Screen",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Update Screen",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Screen 1 Updated\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Delete Screen",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Seats",
+					"item": [
+						{
+							"name": "Create Seat",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"rowLabel\": \"A\",\n  \"seatNumber\": 1,\n  \"seatType\": \"STANDARD\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}/seats",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}",
+										"seats"
+									]
+								}
+							}
+						},
+						{
+							"name": "Bulk Create Seats",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"rowLabel\": \"A\",\n  \"seatType\": \"STANDARD\",\n  \"startNumber\": 1,\n  \"endNumber\": 10\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}/seats/bulk",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}",
+										"seats",
+										"bulk"
+									]
+								}
+							}
+						},
+						{
+							"name": "List Seats",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}/seats",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}",
+										"seats"
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Seat",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}/seats/{{seat_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}",
+										"seats",
+										"{{seat_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Update Seat",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"seatType\": \"VIP\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}/seats/{{seat_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}",
+										"seats",
+										"{{seat_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Delete Seat",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{theatre_url}}/theatres/{{theatre_id}}/screens/{{screen_id}}/seats/{{seat_id}}",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"theatres",
+										"{{theatre_id}}",
+										"screens",
+										"{{screen_id}}",
+										"seats",
+										"{{seat_id}}"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Internal",
+					"item": [
+						{
+							"name": "Get Theatre Admin by User ID (Internal)",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-Internal-Key",
+										"value": "{{internal_api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{theatre_url}}/internal/theatre-admins/by-user/1",
+									"host": [
+										"{{theatre_url}}"
+									],
+									"path": [
+										"internal",
+										"theatre-admins",
+										"by-user",
+										"1"
+									]
+								}
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "3. Movie Service",
+			"item": [
+				{
+					"name": "Movies",
+					"item": [
+						{
+							"name": "Create Movie",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"title\": \"Inception\",\n  \"description\": \"A thief who steals corporate secrets through dream-sharing technology\",\n  \"releaseDate\": \"2024-07-16\",\n  \"director\": \"Christopher Nolan\",\n  \"cast\": \"Leonardo DiCaprio, Joseph Gordon-Levitt\",\n  \"language\": \"English\",\n  \"runningTimeMinutes\": 148\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{movie_url}}/movies",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movies"
+									]
+								}
+							}
+						},
+						{
+							"name": "List Movies",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{movie_url}}/movies?page=1&pageSize=20",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movies"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "20"
+										},
+										{
+											"key": "search",
+											"value": "",
+											"disabled": true
+										},
+										{
+											"key": "language",
+											"value": "",
+											"disabled": true
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Movie",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{movie_url}}/movies/{{movie_id}}",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movies",
+										"{{movie_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Update Movie",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"description\": \"Updated description\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{movie_url}}/movies/{{movie_id}}",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movies",
+										"{{movie_id}}"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Movie Images",
+					"item": [
+						{
+							"name": "Add Movie Image",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"imageUrl\": \"https://example.com/inception-poster.jpg\",\n  \"isPrimary\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{movie_url}}/movies/{{movie_id}}/images",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movies",
+										"{{movie_id}}",
+										"images"
+									]
+								}
+							}
+						},
+						{
+							"name": "Update Movie Image",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"isPrimary\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{movie_url}}/movies/{{movie_id}}/images/{{image_id}}",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movies",
+										"{{movie_id}}",
+										"images",
+										"{{image_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Delete Movie Image",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{movie_url}}/movies/{{movie_id}}/images/{{image_id}}",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movies",
+										"{{movie_id}}",
+										"images",
+										"{{image_id}}"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Movie Requests",
+					"item": [
+						{
+							"name": "Create Movie Request",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"title\": \"The Dark Knight\",\n  \"description\": \"Batman faces the Joker\",\n  \"releaseDate\": \"2024-08-01\",\n  \"language\": \"English\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{movie_url}}/movie-requests",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movie-requests"
+									]
+								}
+							}
+						},
+						{
+							"name": "List Movie Requests",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{movie_url}}/movie-requests?page=1&pageSize=20",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movie-requests"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "20"
+										},
+										{
+											"key": "status",
+											"value": "",
+											"disabled": true
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Movie Request",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{movie_url}}/movie-requests/{{request_id}}",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movie-requests",
+										"{{request_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Approve Movie Request",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"reviewReason\": \"Approved - popular demand\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{movie_url}}/movie-requests/{{request_id}}/approve",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movie-requests",
+										"{{request_id}}",
+										"approve"
+									]
+								}
+							}
+						},
+						{
+							"name": "Reject Movie Request",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"reviewReason\": \"Not suitable for our audience\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{movie_url}}/movie-requests/{{request_id}}/reject",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"movie-requests",
+										"{{request_id}}",
+										"reject"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Internal",
+					"item": [
+						{
+							"name": "Get Movie by ID (Internal)",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-Internal-Key",
+										"value": "{{internal_api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{movie_url}}/internal/movies/1",
+									"host": [
+										"{{movie_url}}"
+									],
+									"path": [
+										"internal",
+										"movies",
+										"1"
+									]
+								}
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "4. Show Service",
+			"item": [
+				{
+					"name": "Shows",
+					"item": [
+						{
+							"name": "Create Show",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"movieId\": 1,\n  \"screenId\": 1,\n  \"startsAt\": \"2025-12-25T14:00:00Z\",\n  \"endsAt\": \"2025-12-25T16:30:00Z\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{show_url}}/shows",
+									"host": [
+										"{{show_url}}"
+									],
+									"path": [
+										"shows"
+									]
+								}
+							}
+						},
+						{
+							"name": "List Shows",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{show_url}}/shows?page=1&pageSize=20",
+									"host": [
+										"{{show_url}}"
+									],
+									"path": [
+										"shows"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "20"
+										},
+										{
+											"key": "movieId",
+											"value": "",
+											"disabled": true
+										},
+										{
+											"key": "screenId",
+											"value": "",
+											"disabled": true
+										},
+										{
+											"key": "date",
+											"value": "",
+											"disabled": true
+										},
+										{
+											"key": "fromDate",
+											"value": "",
+											"disabled": true
+										},
+										{
+											"key": "toDate",
+											"value": "",
+											"disabled": true
+										},
+										{
+											"key": "status",
+											"value": "",
+											"disabled": true
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Show",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{show_url}}/shows/{{show_id}}",
+									"host": [
+										"{{show_url}}"
+									],
+									"path": [
+										"shows",
+										"{{show_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Update Show",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"startsAt\": \"2025-12-25T15:00:00Z\",\n  \"endsAt\": \"2025-12-25T17:30:00Z\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{show_url}}/shows/{{show_id}}",
+									"host": [
+										"{{show_url}}"
+									],
+									"path": [
+										"shows",
+										"{{show_id}}"
+									]
+								}
+							}
+						},
+						{
+							"name": "Delete Show",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{show_url}}/shows/{{show_id}}",
+									"host": [
+										"{{show_url}}"
+									],
+									"path": [
+										"shows",
+										"{{show_id}}"
+									]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Show Prices",
+					"item": [
+						{
+							"name": "Get Show Prices",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{show_url}}/shows/{{show_id}}/prices",
+									"host": [
+										"{{show_url}}"
+									],
+									"path": [
+										"shows",
+										"{{show_id}}",
+										"prices"
+									]
+								}
+							}
+						},
+						{
+							"name": "Set Show Prices",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"prices\": [\n    {\n      \"seatType\": \"STANDARD\",\n      \"amount\": 1200,\n      \"currency\": \"GBP\"\n    },\n    {\n      \"seatType\": \"VIP\",\n      \"amount\": 2500,\n      \"currency\": \"GBP\"\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{show_url}}/shows/{{show_id}}/prices",
+									"host": [
+										"{{show_url}}"
+									],
+									"path": [
+										"shows",
+										"{{show_id}}",
+										"prices"
+									]
+								}
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "5. Booking Service",
+			"item": [
+				{
+					"name": "Availability",
+					"item": [
+						{
+							"name": "Get Seat Availability",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{booking_url}}/shows/{{show_id}}/seats/availability",
+									"host": [
+										"{{booking_url}}"
+									],
+									"path": [
+										"shows",
+										"{{show_id}}",
+										"seats",
+										"availability"
+									]
+								}
+							}
+						}
+					]
+				}
+			]
+		}
+	]
+}

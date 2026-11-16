@@ -281,6 +281,19 @@ describe('HoldService', () => {
     expect(seatLockService.release).toHaveBeenCalledTimes(2);
   });
 
+  it('writes booking_seats and seat_holds in ascending seat ID order, whatever the request order', async () => {
+    const { service, manager } = buildService();
+
+    await service.holdSeats({ ...DTO, seatIds: ['11', '10'] });
+
+    const seatIdsOf = (call: number) =>
+      (manager.save.mock.calls[call][0] as { seatId: number }[]).map(
+        (s) => s.seatId,
+      );
+    expect(seatIdsOf(1)).toEqual([10, 11]); // booking_seats
+    expect(seatIdsOf(2)).toEqual([10, 11]); // seat_holds
+  });
+
   describe('stale-hold reclaim', () => {
     const past = new Date(Date.now() - 60_000);
     const stale = (

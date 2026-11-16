@@ -21,7 +21,7 @@ After changing anything under `libs/`, run `npm run build:libs` again before sta
 ```bash
 npm ci
 cp .env.example .env        # then fill in the secrets (DB_PASSWORD, JWT_*, ID_ENCRYPTION_KEY, INTERNAL_API_KEY, ADMIN_*)
-docker compose up -d        # RabbitMQ and Redis (SQL Server runs locally, not in compose)
+docker compose up -d        # RabbitMQ and Redis, using REDIS_PASSWORD and RABBITMQ_USER/PASSWORD from .env
 npm run build:libs
 npm run db:migrate
 ```
@@ -108,10 +108,10 @@ TEST_DB_NAME=moviebooking_test
 
 TEST_REDIS_HOST=127.0.0.1
 TEST_REDIS_PORT=6379
-TEST_REDIS_PASSWORD=redis123          # the password in docker-compose.yml
+TEST_REDIS_PASSWORD=<REDIS_PASSWORD from your .env>
 # Optional: TEST_REDIS_DB (default 15)
 
-TEST_RABBITMQ_URL=amqp://moviebooking:moviebooking123@127.0.0.1:5672
+TEST_RABBITMQ_URL=amqp://<RABBITMQ_USER>:<RABBITMQ_PASSWORD>@127.0.0.1:5672
 ```
 
 The SQL Server login needs permission to create and drop databases; the suite creates the `_test` database itself.

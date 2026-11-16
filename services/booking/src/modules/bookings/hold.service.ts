@@ -467,7 +467,11 @@ export class HoldService {
       showId,
       screenId: show.screenId,
       email: dto.email,
-      seats: preparedSeats,
+      // Ascending seat ID, so every request takes its database locks on seat_holds
+      // and booking_seats rows in the same order as its Redis locks. Without Redis
+      // (fail-open), request order would let [A3, A1] and [A1, A2] lock in opposite
+      // orders and deadlock.
+      seats: [...preparedSeats].sort((a, b) => a.seatId - b.seatId),
       totalAmountCents,
       currency,
       holdExpiresAt,

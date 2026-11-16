@@ -35,8 +35,10 @@ describe('concurrency (Redis unavailable: the database index is the guard)', () 
     expect(await liveHoldsBySeat(ctx)).toEqual({ A1: ['ACTIVE'] });
   });
 
+  // 30 rounds: before seats were inserted in ascending order this failed with a
+  // deadlock about once in 60 requests.
   it('overlapping seat sets without Redis: no 500s and no seat held twice', async () => {
-    for (let round = 0; round < 10; round++) {
+    for (let round = 0; round < 30; round++) {
       await resetBookings(ctx);
 
       const results = await Promise.all([

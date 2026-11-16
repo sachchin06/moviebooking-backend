@@ -54,3 +54,53 @@ npm run test:cov     # unit tests with coverage
 ```
 
 Line endings are LF everywhere (`.gitattributes`). Prettier is applied through ESLint; `npx prettier --write .` reformats the repository.
+
+Unit tests enforce a coverage floor per package (`coverageThreshold` in each `package.json`); `npm run test:cov` fails if coverage drops below it.
+
+## Integration tests (booking)
+
+The booking service has an integration suite that runs the real booking code against a real SQL Server, Redis and RabbitMQ. Only the Show and Theatre HTTP clients are faked. It covers concurrent seat holds (with and without Redis), the full hold → payment → confirm flow including the RabbitMQ event, expiry and the sweep, and races between confirm, cancel and new holds.
+
+### What it needs
+
+| Dependency | Locally | Notes |
+|---|---|---|
+| SQL Server | Your local instance | A database whose name **ends in `_test`**. The suite drops and recreates it on every run, and refuses any other name. |
+| Redis | `docker compose up -d redis` | Uses logical database 15 by default, so your development lock keys are untouched |
+| RabbitMQ | `docker compose up -d rabbitmq` | Publishes to its own exchange (`booking.events.integration`) |
+
+### Settings
+
+Set these in your shell, or put them in a `.env.test` file at the repository root (git-ignored):
+
+```dotenv
+TEST_DB_HOST=localhost
+TEST_DB_PORT=1433
+TEST_DB_USERNAME=sa
+TEST_DB_PASSWORD=<your SQL Server password>
+TEST_DB_NAME=moviebooking_test
+# Optional: TEST_DB_ENCRYPT (default false), TEST_DB_TRUST_SERVER_CERTIFICATE (default true)
+
+TEST_REDIS_HOST=127.0.0.1
+TEST_REDIS_PORT=6379
+TEST_REDIS_PASSWORD=redis123          # the password in docker-compose.yml
+# Optional: TEST_REDIS_DB (default 15)
+
+TEST_RABBITMQ_URL=amqp://moviebooking:moviebooking123@127.0.0.1:5672
+```
+
+The SQL Server login needs permission to create and drop databases; the suite creates the `_test` database itself.
+
+### Running
+
+```bash
+docker compose up -d redis rabbitmq
+npm run build:libs                                   # the suite applies the compiled migrations
+npm run test:int -w @moviebooking/booking-service
+```
+
+The run takes under a minute. It runs test files one at a time (`--runInBand`), because they share the database. Before the first test, it drops and recreates the test database and applies every migration. Between tests, it deletes all bookings and clears the Redis test database.
+
+Test files end in `.int-spec.ts` and live in `services/booking/test/integration/`. `harness.ts` builds the app and has helpers for the API, database checks, backdating deadlines and consuming RabbitMQ events.
+
+CI runs the same suite in the `integration` job, using service containers for SQL Server, Redis and RabbitMQ.

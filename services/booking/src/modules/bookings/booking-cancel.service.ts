@@ -2,14 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { throwError } from '@moviebooking/common';
-import {
-  Booking,
-  SeatHold,
-  BookingStatus,
-  SeatHoldStatus,
-} from '@moviebooking/database';
+import { Booking, BookingStatus, SeatHoldStatus } from '@moviebooking/database';
 import { assertTransition } from './booking-state';
 import { BookingEventsPublisher } from '../../messaging/booking-events.publisher';
+import { settleActiveHolds } from './seat-holds';
 
 /**
  * Guest-initiated cancellation.
@@ -56,11 +52,7 @@ export class BookingCancelService {
       booking.status = BookingStatus.FAILED;
       await manager.save(Booking, booking);
 
-      await manager.update(
-        SeatHold,
-        { bookingId: booking.id, status: SeatHoldStatus.ACTIVE },
-        { status: SeatHoldStatus.RELEASED },
-      );
+      await settleActiveHolds(manager, booking.id, SeatHoldStatus.RELEASED);
 
       return booking;
     });

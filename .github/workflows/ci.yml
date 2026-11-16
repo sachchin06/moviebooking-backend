@@ -55,3 +55,95 @@ jobs:
             libs/*/coverage/
           if-no-files-found: ignore
           retention-days: 14
+
+  integration:
+    name: Booking integration tests (SQL Server, Redis, RabbitMQ)
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Throwaway credentials that exist only in this workflow and these containers.
+    # The service definitions below repeat them as literals, because GitHub does not
+    # allow the env context inside `services`; keep both places in step.
+    env:
+      CI_SA_PASSWORD: Ci-Throwaway-Pa55word!
+      CI_RABBITMQ_USER: ci
+      CI_RABBITMQ_PASSWORD: ci-throwaway-password
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: Ci-Throwaway-Pa55word!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Ci-Throwaway-Pa55word!' -C -Q 'SELECT 1' -b"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+          --health-start-period 20s
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      rabbitmq:
+        image: rabbitmq:3-management
+        env:
+          RABBITMQ_DEFAULT_USER: ci
+          RABBITMQ_DEFAULT_PASS: ci-throwaway-password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The global setup applies the compiled migrations from libs/database/dist.
+      - name: Build shared libraries
+        run: npm run build:libs
+
+      # The runner waits for the health checks above; this also proves SQL Server
+      # accepts logins before creating the database.
+      - name: Wait for SQL Server and create the test database
+        run: |
+          for i in $(seq 1 30); do
+            docker exec ${{ job.services.mssql.id }} /opt/mssql-tools18/bin/sqlcmd \
+              -S localhost -U sa -P "$CI_SA_PASSWORD" -C -b \
+              -Q "IF DB_ID('moviebooking_test') IS NULL CREATE DATABASE moviebooking_test" && exit 0
+            sleep 2
+          done
+          echo "SQL Server did not become ready" >&2
+          exit 1
+
+      - name: Booking integration tests
+        run: npm run test:int -w @moviebooking/booking-service
+        env:
+          TEST_DB_HOST: localhost
+          TEST_DB_PORT: '1433'
+          TEST_DB_USERNAME: sa
+          TEST_DB_PASSWORD: ${{ env.CI_SA_PASSWORD }}
+          TEST_DB_NAME: moviebooking_test
+          TEST_REDIS_HOST: localhost
+          TEST_REDIS_PORT: '6379'
+          TEST_RABBITMQ_URL: amqp://${{ env.CI_RABBITMQ_USER }}:${{ env.CI_RABBITMQ_PASSWORD }}@localhost:5672

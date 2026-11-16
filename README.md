@@ -67,7 +67,7 @@ There are 57 public and 20 internal endpoints across the five services. More det
 | theatre | Working | Theatres, screens, seats with bulk create and update, theatre-admin assignment; refuses to deactivate anything with future shows | No integration tests | 50 unit |
 | movie | Working | Movie catalogue, image URLs with a primary image, movie requests from theatre admins and their review | Images are URLs, there is no file upload; no integration tests | 26 unit |
 | show | Working | Show scheduling without overlaps per screen, prices per seat type | No integration tests | 74 unit |
-| booking | Working | Seat availability, seat holds, the booking state machine, expiry sweep, internal endpoints for a payment service, events | Nothing calls the payment endpoints yet; events can be lost (no outbox) | 120 unit, 16 integration |
+| booking | Working | Seat availability, seat holds, the booking state machine, expiry sweep, internal endpoints for a payment service, events | Nothing calls the payment endpoints yet; events can be lost (no outbox); holds don't yet check that the show hasn't started | 120 unit, 16 integration |
 | payment | Not started | | | |
 | notification | Not started | | | |
 | web-admin | Not started | | | |
@@ -174,7 +174,7 @@ npm run start:dev -w @moviebooking/booking-service
 
 Outside production, each service serves Swagger at `http://localhost:<port>/api/docs`. A Postman collection is in [docs/MovieBooking.postman_collection.json](docs/MovieBooking.postman_collection.json).
 
-If `npm run db:migrate` stops at migration M7 because a seat is claimed twice, see [DEVELOPMENT.md](DEVELOPMENT.md#when-migration-m7-refuses-to-run-seat-conflicts). Build order, ports and test settings are covered there too.
+Build order, ports, the seat-conflict repair command and test settings are covered in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Testing
 

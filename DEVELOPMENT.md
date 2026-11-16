@@ -26,6 +26,31 @@ npm run build:libs
 npm run db:migrate
 ```
 
+## When migration M7 refuses to run: seat conflicts
+
+Migration M7 (`M7ConvertedHolds`) creates the unique index that makes double-booking impossible: one live claim (an ACTIVE or CONVERTED hold) per seat per show. If existing data already has a seat claimed by more than one booking, **M7 refuses to run by design**. It lists the seats and changes nothing, because deciding who keeps a seat is a business decision, not a schema change.
+
+Resolve those seats with the repair command, then run the migrations again:
+
+```bash
+npm run db:repair-seat-conflicts              # dry run: report only (the default)
+npm run db:repair-seat-conflicts -- --apply   # repair the seats marked SAFE, in one transaction
+npm run db:migrate
+```
+
+What the command decides, seat by seat:
+
+| Situation | What `--apply` does |
+|---|---|
+| Exactly one CONFIRMED booking, plus holds from bookings that are not confirmed | **Safe.** The confirmed booking keeps the seat. Each other booking is expired through the booking state machine, together with all its active holds, as the expiry sweep would. |
+| Two or more CONFIRMED bookings | **Nothing.** Listed for manual review: a real double sale, which needs a refund. |
+| A PENDING_REVIEW booking (payment received) also claims the seat | **Nothing.** Listed for manual review. |
+| No confirmed booking | **Nothing.** Listed for manual review. |
+
+Every change is printed. Exit codes: `0` means done, `1` means an error (nothing changed), `2` means some seats still need manual review. M7 keeps refusing until those seats are resolved by hand.
+
+Stop the booking service while you repair, so no new holds arrive in the middle.
+
 ## Running the services
 
 Run each service in its own terminal:

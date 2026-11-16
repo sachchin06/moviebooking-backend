@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import {
   Movie,
   MovieRequest,
@@ -124,73 +124,76 @@ export class MovieRequestsService {
   }
 
   async approve(id: number, dto: ReviewMovieRequestDto, user: ICurrentUser) {
-    const request = await this.movieRequestRepository.findOne({
-      where: { id },
+    // Lock, re-check and write in one transaction: creating the movie and
+    // marking the request APPROVED either both happen or neither does.
+    const { savedRequest, savedMovie } = await this.dataSource.transaction(
+      async (manager) => {
+        const request = await this.lockPendingRequest(manager, id, 'approved');
+
+        const savedMovie = await manager.save(
+          Movie,
+          manager.create(Movie, {
+            title: request.title,
+            description: request.description,
+            releaseDate:
+              request.releaseDate ?? request.expectedReleaseDate ?? new Date(),
+            cast: request.cast,
+            director: request.director,
+            language: request.language,
+            status: MovieStatus.ACTIVE,
+          }),
+        );
+
+        request.status = MovieRequestStatus.APPROVED;
+        request.reviewedByUserId = user.id;
+        request.reviewedAt = new Date();
+        request.reviewReason = dto.reviewReason;
+        request.createdMovieId = savedMovie.id;
+
+        const savedRequest = await manager.save(MovieRequest, request);
+        return { savedRequest, savedMovie };
+      },
+    );
+
+    this.logger.log(
+      `Movie request ${id} approved, movie created: ${savedMovie.id}`,
+    );
+    return this.mapDetailResponse({
+      ...savedRequest,
+      createdMovie: savedMovie,
     });
-
-    if (!request) {
-      throwError('NOT_FOUND', 'Movie request not found');
-    }
-
-    if (request.status !== MovieRequestStatus.PENDING) {
-      throwError(
-        'BUSINESS_RULE_VIOLATION',
-        'Only PENDING requests can be approved',
-      );
-    }
-
-    // Atomic: create movie + update request in one transaction
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      // Create movie from request data
-      const movie = queryRunner.manager.create(Movie, {
-        title: request.title,
-        description: request.description,
-        releaseDate:
-          request.releaseDate ?? request.expectedReleaseDate ?? new Date(),
-        cast: request.cast,
-        director: request.director,
-        language: request.language,
-        status: MovieStatus.ACTIVE,
-      });
-
-      const savedMovie = await queryRunner.manager.save(Movie, movie);
-
-      // Update request
-      request.status = MovieRequestStatus.APPROVED;
-      request.reviewedByUserId = user.id;
-      request.reviewedAt = new Date();
-      request.reviewReason = dto.reviewReason;
-      request.createdMovieId = savedMovie.id;
-
-      const savedRequest = await queryRunner.manager.save(request);
-      await queryRunner.commitTransaction();
-
-      this.logger.log(
-        `Movie request ${id} approved, movie created: ${savedMovie.id}`,
-      );
-      return this.mapDetailResponse({
-        ...savedRequest,
-        createdMovie: savedMovie,
-      });
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      this.logger.error(
-        `Failed to approve request ${id}: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
   }
 
   async reject(id: number, dto: ReviewMovieRequestDto, user: ICurrentUser) {
-    const request = await this.movieRequestRepository.findOne({
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const request = await this.lockPendingRequest(manager, id, 'rejected');
+
+      request.status = MovieRequestStatus.REJECTED;
+      request.reviewedByUserId = user.id;
+      request.reviewedAt = new Date();
+      request.reviewReason = dto.reviewReason;
+
+      return manager.save(MovieRequest, request);
+    });
+
+    this.logger.log(`Movie request ${id} rejected by user ${user.id}`);
+    return this.mapResponse(saved);
+  }
+
+  /**
+   * Reads the request with an exclusive row lock and checks it is still PENDING.
+   * A second reviewer acting at the same time waits on the lock, then sees the
+   * first reviewer's decision and gets 422, so a request is never decided twice
+   * (and never creates two movies).
+   */
+  private async lockPendingRequest(
+    manager: EntityManager,
+    id: number,
+    action: 'approved' | 'rejected',
+  ): Promise<MovieRequest> {
+    const request = await manager.findOne(MovieRequest, {
       where: { id },
+      lock: { mode: 'pessimistic_write' },
     });
 
     if (!request) {
@@ -200,18 +203,11 @@ export class MovieRequestsService {
     if (request.status !== MovieRequestStatus.PENDING) {
       throwError(
         'BUSINESS_RULE_VIOLATION',
-        'Only PENDING requests can be rejected',
+        `Only PENDING requests can be ${action}`,
       );
     }
 
-    request.status = MovieRequestStatus.REJECTED;
-    request.reviewedByUserId = user.id;
-    request.reviewedAt = new Date();
-    request.reviewReason = dto.reviewReason;
-
-    const saved = await this.movieRequestRepository.save(request);
-    this.logger.log(`Movie request ${id} rejected by user ${user.id}`);
-    return this.mapResponse(saved);
+    return request;
   }
 
   private mapResponse(request: MovieRequest) {

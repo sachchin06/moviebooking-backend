@@ -2,14 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThanOrEqual, Repository } from 'typeorm';
-import {
-  Booking,
-  SeatHold,
-  BookingStatus,
-  SeatHoldStatus,
-} from '../../entities';
+import { Booking, BookingStatus } from '../../entities';
 import { BookingEventsPublisher } from '../../messaging/booking-events.publisher';
-import { assertTransition } from './booking-state';
+import { expireLockedBooking } from './booking-expiry';
 
 /** Upper bound per status per run; anything left over is picked up next minute. */
 export const SWEEP_BATCH_SIZE = 200;
@@ -71,21 +66,12 @@ export class HoldSweepService {
           lock: { mode: 'pessimistic_write' },
         });
 
-        if (!booking || !this.isOverdue(booking, new Date())) {
+        if (!booking) {
           return null;
         }
-
-        assertTransition(booking.status, BookingStatus.EXPIRED);
-        booking.status = BookingStatus.EXPIRED;
-        await manager.save(Booking, booking);
-
-        await manager.update(
-          SeatHold,
-          { bookingId: booking.id, status: SeatHoldStatus.ACTIVE },
-          { status: SeatHoldStatus.EXPIRED },
-        );
-
-        return booking;
+        return (await expireLockedBooking(manager, booking, new Date()))
+          ? booking
+          : null;
       });
 
       if (!expired) return;
@@ -107,15 +93,5 @@ export class HoldSweepService {
         error.stack,
       );
     }
-  }
-
-  private isOverdue(booking: Booking, now: Date): boolean {
-    if (booking.status === BookingStatus.HOLDING) {
-      return !!booking.holdExpiresAt && booking.holdExpiresAt <= now;
-    }
-    if (booking.status === BookingStatus.PAYMENT_PENDING) {
-      return !!booking.paymentExpiresAt && booking.paymentExpiresAt <= now;
-    }
-    return false;
   }
 }

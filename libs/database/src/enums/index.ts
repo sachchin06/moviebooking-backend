@@ -64,8 +64,16 @@ export enum BookingStatus {
   PENDING_REVIEW = 'PENDING_REVIEW',
 }
 
+/**
+ * ACTIVE and CONVERTED holds both occupy their seat: the filtered unique index on
+ * seat_holds (show_id, seat_id) WHERE status IN ('ACTIVE', 'CONVERTED') allows only one.
+ * - ACTIVE: reserved, waiting for payment
+ * - CONVERTED: the booking was confirmed; the seat is sold
+ * - EXPIRED / RELEASED: no longer occupies the seat
+ */
 export enum SeatHoldStatus {
   ACTIVE = 'ACTIVE',
+  CONVERTED = 'CONVERTED',
   EXPIRED = 'EXPIRED',
   RELEASED = 'RELEASED',
 }

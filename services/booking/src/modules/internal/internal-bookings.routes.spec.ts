@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { HttpExceptionFilter } from '@moviebooking/common';
 import { InternalBookingsController } from './internal-bookings.controller';
@@ -12,6 +12,7 @@ describe('Booking /internal routes need X-Internal-Key', () => {
   let baseUrl: string;
   const internalBookingsService = {
     getByReference: jest.fn().mockResolvedValue({ bookingRef: 'REF0000001' }),
+    existsForShow: jest.fn().mockResolvedValue({ exists: true }),
   };
   const internalTransitionsService = {
     markPaymentPending: jest
@@ -35,6 +36,15 @@ describe('Booking /internal routes need X-Internal-Key', () => {
     }).compile();
 
     app = moduleRef.createNestApplication({ logger: false });
+    // Same validation settings as bootstrapService uses for booking.
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
     app.useGlobalFilters(new HttpExceptionFilter());
     await app.listen(0);
     baseUrl = (await app.getUrl()).replace('[::1]', 'localhost');
@@ -55,6 +65,7 @@ describe('Booking /internal routes need X-Internal-Key', () => {
 
   const routes: [string, string][] = [
     ['GET', '/internal/bookings/REF0000001'],
+    ['GET', '/internal/bookings/exists?showId=5'],
     ['POST', '/internal/bookings/REF0000001/mark-payment-pending'],
     ['POST', '/internal/bookings/REF0000001/confirm'],
     ['POST', '/internal/bookings/REF0000001/fail'],
@@ -93,5 +104,28 @@ describe('Booking /internal routes need X-Internal-Key', () => {
     expect(internalTransitionsService.confirmBooking).toHaveBeenCalledWith(
       'REF0000001',
     );
+  });
+
+  describe('GET /internal/bookings/exists', () => {
+    it('resolves to the exists handler, not to :bookingRef', async () => {
+      const res = await call('GET', '/internal/bookings/exists?showId=5', KEY);
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ exists: true });
+      expect(internalBookingsService.existsForShow).toHaveBeenCalledWith(5);
+      expect(internalBookingsService.getByReference).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['missing', ''],
+      ['zero', '?showId=0'],
+      ['negative', '?showId=-3'],
+      ['non-numeric', '?showId=abc'],
+      ['an unknown parameter', '?showId=5&extra=1'],
+    ])('returns 400 for a %s showId', async (_label, query) => {
+      const res = await call('GET', `/internal/bookings/exists${query}`, KEY);
+      expect(res.status).toBe(400);
+      expect(internalBookingsService.existsForShow).not.toHaveBeenCalled();
+    });
   });
 });

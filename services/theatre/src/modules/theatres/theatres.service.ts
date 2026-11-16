@@ -11,6 +11,7 @@ import {
 import { CreateTheatreDto } from './dto/create-theatre.dto';
 import { UpdateTheatreDto } from './dto/update-theatre.dto';
 import { ListTheatresQueryDto } from './dto/list-theatres-query.dto';
+import { ShowClient } from '../../clients/show.client';
 
 @Injectable()
 export class TheatresService {
@@ -19,6 +20,7 @@ export class TheatresService {
     private readonly theatreRepository: Repository<Theatre>,
     @InjectRepository(Screen)
     private readonly screenRepository: Repository<Screen>,
+    private readonly showClient: ShowClient,
   ) {}
 
   async create(dto: CreateTheatreDto) {
@@ -91,6 +93,13 @@ export class TheatresService {
       throwError('NOT_FOUND', 'Theatre not found');
     }
 
+    if (
+      dto.status === TheatreStatus.INACTIVE &&
+      theatre.status !== TheatreStatus.INACTIVE
+    ) {
+      await this.assertNoFutureShows(theatre.id);
+    }
+
     Object.assign(theatre, dto);
     const updated = await this.theatreRepository.save(theatre);
     return this.mapResponse(updated);
@@ -103,11 +112,30 @@ export class TheatresService {
       throwError('NOT_FOUND', 'Theatre not found');
     }
 
-    // TODO: refuse while the theatre has future shows (needs a Show Service lookup)
+    await this.assertNoFutureShows(theatre.id);
     theatre.status = TheatreStatus.INACTIVE;
     await this.theatreRepository.save(theatre);
 
     return this.mapResponse(theatre);
+  }
+
+  /**
+   * Refuses (409) to deactivate a theatre while any of its screens has future ACTIVE
+   * shows. If the Show Service is down the client throws SERVICE_UNAVAILABLE (503).
+   */
+  private async assertNoFutureShows(theatreId: number): Promise<void> {
+    const screens = await this.screenRepository.find({
+      where: { theatreId },
+      select: ['id'],
+    });
+    const screenIds = screens.map((s) => s.id);
+
+    if (await this.showClient.hasFutureShows(screenIds)) {
+      throwError(
+        'CONFLICT',
+        'Cannot deactivate a theatre that has future shows',
+      );
+    }
   }
 
   private mapResponse(theatre: Theatre) {

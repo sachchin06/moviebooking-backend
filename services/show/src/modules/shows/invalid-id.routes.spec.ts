@@ -8,8 +8,6 @@ import { ShowsController } from './shows.controller';
 import { ShowsService } from './shows.service';
 import { ShowPricesController } from '../show-prices/show-prices.controller';
 import { ShowPricesService } from '../show-prices/show-prices.service';
-import { SeatAvailabilityController } from '../seat-availability/seat-availability.controller';
-import { SeatAvailabilityService } from '../seat-availability/seat-availability.service';
 
 /**
  * An ID that fails to decrypt must be rejected with 400 before any lookup. Previously
@@ -27,7 +25,6 @@ describe('Show routes with an invalid encrypted ID', () => {
     delete: jest.fn(),
   };
   const showPricesService = { getPrices: jest.fn(), setPrices: jest.fn() };
-  const seatAvailabilityService = { getAvailability: jest.fn() };
   const showRepository = { findOne: jest.fn() };
 
   const superAdmin = {
@@ -42,15 +39,10 @@ describe('Show routes with an invalid encrypted ID', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [
-        ShowsController,
-        ShowPricesController,
-        SeatAvailabilityController,
-      ],
+      controllers: [ShowsController, ShowPricesController],
       providers: [
         { provide: ShowsService, useValue: showsService },
         { provide: ShowPricesService, useValue: showPricesService },
-        { provide: SeatAvailabilityService, useValue: seatAvailabilityService },
         { provide: getRepositoryToken(Show), useValue: showRepository },
         { provide: TheatreClient, useValue: { getScreen: jest.fn() } },
       ],
@@ -90,10 +82,14 @@ describe('Show routes with an invalid encrypted ID', () => {
     return { status: res.status, code: body.error?.code };
   }
 
+  it('no longer serves GET /shows/:showId/seats (the Booking Service owns availability)', async () => {
+    const res = await fetch(`${baseUrl}/shows/12/seats`);
+    expect(res.status).toBe(404);
+  });
+
   it.each([
     ['GET', '/shows/not-an-id'],
     ['GET', '/shows/not-an-id/prices'],
-    ['GET', '/shows/not-an-id/seats'],
   ])('%s %s returns 400 for a guest', async (method, path) => {
     expect(await call(method, path)).toEqual({
       status: 400,
@@ -101,7 +97,6 @@ describe('Show routes with an invalid encrypted ID', () => {
     });
     expect(showsService.findOne).not.toHaveBeenCalled();
     expect(showPricesService.getPrices).not.toHaveBeenCalled();
-    expect(seatAvailabilityService.getAvailability).not.toHaveBeenCalled();
   });
 
   it.each([

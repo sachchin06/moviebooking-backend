@@ -23,7 +23,8 @@
     "docker:logs": "docker-compose logs -f",
     "db:migrate": "npm run migration:run --workspace=@moviebooking/database",
     "db:migrate:revert": "npm run migration:revert --workspace=@moviebooking/database",
-    "db:migrate:generate": "npm run migration:generate --workspace=@moviebooking/database"
+    "db:migrate:generate": "npm run migration:generate --workspace=@moviebooking/database",
+    "db:repair-seat-conflicts": "npm run repair:seat-conflicts --workspace=@moviebooking/database --"
   },
   "engines": {
     "node": ">=20.0.0",

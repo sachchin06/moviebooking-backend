@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Movie, MovieImage, MovieStatus } from '../../entities';
 import {
   throwError,
+  canSeeInactiveEverywhere,
   PaginatedResponse,
   encryptId,
   ICurrentUser,
@@ -52,11 +53,17 @@ export class MoviesService {
 
     const qb = this.movieRepository.createQueryBuilder('movie');
 
-    // Guest: ACTIVE only; authenticated: all
-    if (!user) {
+    // Visibility: SUPER_ADMIN and STAFF see every status (optionally filtered);
+    // everyone else sees ACTIVE movies only, whatever status they ask for.
+    if (canSeeInactiveEverywhere(user)) {
+      if (status) {
+        qb.where('movie.status = :status', { status });
+      }
+    } else {
+      if (status && status !== MovieStatus.ACTIVE) {
+        return new PaginatedResponse([], 0, page, pageSize);
+      }
       qb.where('movie.status = :status', { status: MovieStatus.ACTIVE });
-    } else if (status) {
-      qb.where('movie.status = :status', { status });
     }
 
     if (search) {
@@ -115,8 +122,11 @@ export class MoviesService {
       throwError('NOT_FOUND', 'Movie not found');
     }
 
-    // Guest: only ACTIVE
-    if (!user && movie.status !== MovieStatus.ACTIVE) {
+    // Only SUPER_ADMIN and STAFF may see an inactive movie; others get 404.
+    if (
+      movie.status !== MovieStatus.ACTIVE &&
+      !canSeeInactiveEverywhere(user)
+    ) {
       throwError('NOT_FOUND', 'Movie not found');
     }
 

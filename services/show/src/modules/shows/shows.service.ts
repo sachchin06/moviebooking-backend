@@ -1,9 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import {
+  Brackets,
+  DataSource,
+  EntityManager,
+  In,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { Show, ShowPrice, ShowStatus } from '../../entities';
 import {
   throwError,
+  canSeeInactiveEverywhere,
   ICurrentUser,
   encryptId,
   decryptId,
@@ -20,6 +28,10 @@ import {
   TheatreDto,
 } from '../../clients/theatre.client';
 import { MovieClient, MovieDto } from '../../clients/movie.client';
+import { BookingClient } from '../../clients/booking.client';
+
+/** How long a schedule change waits for another change on the same screen. */
+export const SCHEDULE_LOCK_TIMEOUT_MS = 5000;
 
 @Injectable()
 export class ShowsService {
@@ -32,6 +44,8 @@ export class ShowsService {
     private readonly showPriceRepository: Repository<ShowPrice>,
     private readonly theatreClient: TheatreClient,
     private readonly movieClient: MovieClient,
+    private readonly bookingClient: BookingClient,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateShowDto, user: ICurrentUser) {
@@ -60,17 +74,20 @@ export class ShowsService {
       throwError('VALIDATION_ERROR', 'Show end time must be after start time');
     }
 
-    await this.checkOverlap(screenId, startsAt, endsAt);
-
-    const show = this.showRepository.create({
-      screenId,
-      movieId,
-      startsAt,
-      endsAt,
-      status: ShowStatus.ACTIVE,
+    // Check and insert under the screen's schedule lock (see lockScreenSchedule).
+    const saved = await this.dataSource.transaction(async (manager) => {
+      await this.lockScreenSchedule(manager, screenId);
+      await this.checkOverlap(manager, screenId, startsAt, endsAt);
+      return manager.save(
+        manager.create(Show, {
+          screenId,
+          movieId,
+          startsAt,
+          endsAt,
+          status: ShowStatus.ACTIVE,
+        }),
+      );
     });
-
-    const saved = await this.showRepository.save(show);
     this.logger.log(`Show created: ${saved.id} for screen ${saved.screenId}`);
     return this.mapMutationResponse(saved);
   }
@@ -94,11 +111,8 @@ export class ShowsService {
 
     const qb = this.showRepository.createQueryBuilder('show');
 
-    // Guest: ACTIVE only; authenticated: all or filtered by status
-    if (!user) {
-      qb.where('show.status = :status', { status: ShowStatus.ACTIVE });
-    } else if (status) {
-      qb.where('show.status = :status', { status });
+    if (!(await this.applyListVisibility(qb, status, user))) {
+      return new PaginatedResponse([], 0, page, pageSize);
     }
 
     if (decryptedMovieId) {
@@ -186,8 +200,11 @@ export class ShowsService {
       throwError('NOT_FOUND', 'Show not found');
     }
 
-    // Guest: only ACTIVE
-    if (!user && show.status !== ShowStatus.ACTIVE) {
+    // Inactive shows: SUPER_ADMIN/STAFF always, a THEATRE_ADMIN only for their own
+    // theatre (checked once the screen is known below), nobody else.
+    const isInactive = show.status !== ShowStatus.ACTIVE;
+    const isTheatreAdmin = user?.role?.code === ROLES.THEATRE_ADMIN;
+    if (isInactive && !canSeeInactiveEverywhere(user) && !isTheatreAdmin) {
       throwError('NOT_FOUND', 'Show not found');
     }
 
@@ -197,6 +214,14 @@ export class ShowsService {
       this.theatreClient.getScreen(show.screenId),
       this.showPriceRepository.find({ where: { showId: show.id } }),
     ]);
+
+    if (
+      isInactive &&
+      !canSeeInactiveEverywhere(user) &&
+      (user?.theatreId === undefined || screen?.theatreId !== user.theatreId)
+    ) {
+      throwError('NOT_FOUND', 'Show not found');
+    }
 
     const theatre = screen
       ? await this.theatreClient.getTheatre(screen.theatreId)
@@ -216,35 +241,45 @@ export class ShowsService {
       await this.verifyScreenOwnership(show.screenId, user.theatreId);
     }
 
-    // TODO: block time changes when bookings exist (needs a Booking Service lookup)
-    const hasBookings = false;
-
-    if (hasBookings && (dto.startsAt || dto.endsAt)) {
-      throwError(
-        'BUSINESS_RULE_VIOLATION',
-        'Cannot update show times when bookings exist',
+    // Guests have bookings for this time: moving the show would invalidate them.
+    // (The DTO cannot change the screen, so time is the only thing to protect.)
+    if (dto.startsAt !== undefined || dto.endsAt !== undefined) {
+      await this.assertNoLiveBookings(
+        id,
+        'Cannot change the time of a show that has bookings',
       );
     }
 
-    if (dto.startsAt || dto.endsAt) {
-      const newStartsAt = dto.startsAt ? new Date(dto.startsAt) : show.startsAt;
-      const newEndsAt = dto.endsAt ? new Date(dto.endsAt) : show.endsAt;
+    const timeChanges = dto.startsAt !== undefined || dto.endsAt !== undefined;
+    const newStartsAt = dto.startsAt ? new Date(dto.startsAt) : show.startsAt;
+    const newEndsAt = dto.endsAt ? new Date(dto.endsAt) : show.endsAt;
 
-      if (newEndsAt <= newStartsAt) {
-        throwError(
-          'VALIDATION_ERROR',
-          'Show end time must be after start time',
-        );
-      }
-
-      await this.checkOverlap(show.screenId, newStartsAt, newEndsAt, id);
+    if (timeChanges && newEndsAt <= newStartsAt) {
+      throwError('VALIDATION_ERROR', 'Show end time must be after start time');
     }
 
-    if (dto.startsAt) show.startsAt = new Date(dto.startsAt);
-    if (dto.endsAt) show.endsAt = new Date(dto.endsAt);
-    if (dto.status) show.status = dto.status;
+    // Overlaps only matter between ACTIVE shows: check when an active show moves,
+    // or when an inactive show is reactivated into a slot that may now be taken.
+    const willBeActive = (dto.status ?? show.status) === ShowStatus.ACTIVE;
+    const needsOverlapCheck =
+      willBeActive && (timeChanges || show.status !== ShowStatus.ACTIVE);
 
-    const updated = await this.showRepository.save(show);
+    const updated = await this.dataSource.transaction(async (manager) => {
+      if (needsOverlapCheck) {
+        await this.lockScreenSchedule(manager, show.screenId);
+        await this.checkOverlap(
+          manager,
+          show.screenId,
+          newStartsAt,
+          newEndsAt,
+          id,
+        );
+      }
+      show.startsAt = newStartsAt;
+      show.endsAt = newEndsAt;
+      if (dto.status) show.status = dto.status;
+      return manager.save(Show, show);
+    });
     this.logger.log(`Show updated: ${updated.id}`);
     return this.mapMutationResponse(updated);
   }
@@ -260,15 +295,10 @@ export class ShowsService {
       await this.verifyScreenOwnership(show.screenId, user.theatreId);
     }
 
-    // TODO: block delete when bookings exist (needs a Booking Service lookup)
-    const hasBookings = false;
-
-    if (hasBookings) {
-      throwError(
-        'BUSINESS_RULE_VIOLATION',
-        'Cannot delete show with existing bookings',
-      );
-    }
+    await this.assertNoLiveBookings(
+      id,
+      'Cannot delete a show that has bookings',
+    );
 
     await this.showRepository.softDelete(id);
     this.logger.log(`Show deleted: ${id}`);
@@ -277,15 +307,119 @@ export class ShowsService {
 
   // Private Helper Methods
 
-  /** Checks if two time intervals overlap on the same screen. */
+  /**
+   * Applies business rule 4 to a show list query. Returns false when the caller can
+   * see nothing for the requested status (the caller then returns an empty page).
+   * - SUPER_ADMIN, STAFF: every show, optionally filtered by status
+   * - THEATRE_ADMIN: ACTIVE shows everywhere plus INACTIVE shows of their theatre
+   * - everyone else: ACTIVE shows only
+   */
+  private async applyListVisibility(
+    qb: SelectQueryBuilder<Show>,
+    status: ShowStatus | undefined,
+    user?: ICurrentUser,
+  ): Promise<boolean> {
+    if (canSeeInactiveEverywhere(user)) {
+      if (status) {
+        qb.where('show.status = :status', { status });
+      }
+      return true;
+    }
+
+    const ownScreenIds =
+      user?.role?.code === ROLES.THEATRE_ADMIN && user.theatreId !== undefined
+        ? await this.theatreClient.getScreenIdsByTheatre(user.theatreId)
+        : [];
+
+    if (status === ShowStatus.INACTIVE) {
+      if (ownScreenIds.length === 0) {
+        return false;
+      }
+      qb.where('show.status = :status', { status }).andWhere(
+        'show.screenId IN (:...ownScreenIds)',
+        { ownScreenIds },
+      );
+      return true;
+    }
+
+    if (status === ShowStatus.ACTIVE || ownScreenIds.length === 0) {
+      qb.where('show.status = :active', { active: ShowStatus.ACTIVE });
+      return true;
+    }
+
+    qb.where(
+      new Brackets((visible) => {
+        visible
+          .where('show.status = :active', { active: ShowStatus.ACTIVE })
+          .orWhere('show.screenId IN (:...ownScreenIds)', { ownScreenIds });
+      }),
+    );
+    return true;
+  }
+
+  /**
+   * Throws CONFLICT (409) when the show has live bookings. If the Booking Service is
+   * down, the client throws SERVICE_UNAVAILABLE (503): the change is refused rather
+   * than allowed on an unknown answer.
+   */
+  private async assertNoLiveBookings(
+    showId: number,
+    message: string,
+  ): Promise<void> {
+    if (await this.bookingClient.hasLiveBookings(showId)) {
+      throwError('CONFLICT', message);
+    }
+  }
+
+  /**
+   * Serialises schedule changes per screen for the rest of the transaction.
+   *
+   * Without it, two requests can both run the overlap check, both see a free slot,
+   * and both insert: the classic check-then-insert race. sp_getapplock takes an
+   * exclusive application lock named after the screen, owned by the transaction, so a
+   * second change to the same screen waits until the first commits or rolls back,
+   * then sees its row. Changes to different screens never wait for each other.
+   *
+   * Chosen over an UPDLOCK/HOLDLOCK range query because the overlap test is a range
+   * on two columns (starts_at < :end AND ends_at > :start): key-range locks would
+   * depend on which index the optimiser picks and could lock far more than one
+   * screen. An application lock is explicit, cheap and exactly per screen.
+   */
+  private async lockScreenSchedule(
+    manager: EntityManager,
+    screenId: number,
+  ): Promise<void> {
+    const rows: { result: number }[] = await manager.query(
+      `DECLARE @result int;
+       EXEC @result = sp_getapplock
+         @Resource = @0,
+         @LockMode = 'Exclusive',
+         @LockOwner = 'Transaction',
+         @LockTimeout = @1;
+       SELECT @result AS result;`,
+      [`show-schedule:screen:${screenId}`, SCHEDULE_LOCK_TIMEOUT_MS],
+    );
+
+    // 0 or 1 = granted; negative = timeout, deadlock victim or error.
+    const result = rows?.[0]?.result;
+    if (typeof result !== 'number' || result < 0) {
+      throwError(
+        'CONFLICT',
+        "Another change to this screen's schedule is in progress; please try again",
+      );
+    }
+  }
+
+  /** Throws when the interval overlaps an ACTIVE show on the same screen. */
   private async checkOverlap(
+    manager: EntityManager,
     screenId: number,
     startsAt: Date,
     endsAt: Date,
     excludeShowId?: number,
   ): Promise<void> {
-    const qb = this.showRepository
-      .createQueryBuilder('show')
+    const qb = manager
+      .createQueryBuilder(Show, 'show')
       .where('show.screenId = :screenId', { screenId })
       .andWhere('show.status = :status', { status: ShowStatus.ACTIVE })
       .andWhere('show.startsAt < :endsAt', { endsAt })
@@ -307,8 +441,13 @@ export class ShowsService {
   /** Verifies that the screen belongs to the theatre. */
   private async verifyScreenOwnership(
     screenId: number,
-    theatreId: number,
+    theatreId: number | undefined,
   ): Promise<void> {
+    // A theatre admin token without a theatre assignment can own nothing.
+    if (theatreId === undefined) {
+      throwError('FORBIDDEN', 'No theatre assignment found');
+    }
+
     const screen = await this.theatreClient.getScreen(screenId);
 
     if (!screen) {

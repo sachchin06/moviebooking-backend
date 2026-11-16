@@ -1,6 +1,12 @@
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
-import { Booking, BookingSeat } from '@moviebooking/database';
+import {
+  Booking,
+  BookingStatus,
+  SeatHold,
+  SeatHoldStatus,
+} from '@moviebooking/database';
+import { BookingEventsPublisher } from '../../messaging/booking-events.publisher';
 import { HoldService } from './hold.service';
 import { ShowClient } from '../../clients/show.client';
 import { TheatreClient } from '../../clients/theatre.client';
@@ -43,33 +49,68 @@ const PRICES = [
 ];
 const DTO = { showId: '1', seatIds: ['10', '11'], email: 'guest@example.com' };
 
+/** A booking owning stale (expired) ACTIVE holds on the requested seats. */
+interface StaleBooking {
+  id: number;
+  bookingRef: string;
+  showId: number;
+  status: BookingStatus;
+  holdExpiresAt: Date | null;
+  paymentExpiresAt: Date | null;
+}
+
 interface ManagerOptions {
   soldSeatIds?: number[];
   heldSeatIds?: number[];
+  staleBookings?: StaleBooking[];
   holdSaveError?: unknown;
 }
 
 /** Minimal EntityManager covering what the hold transaction uses. */
 function fakeManager(options: ManagerOptions = {}) {
-  const queryBuilder = (seatIds: number[]) => {
+  // Three queries hit seat_holds; their clauses say which one this is:
+  // stale reclaim (expires_at <= now), sold (CONVERTED), currently held (ACTIVE).
+  const queryBuilder = () => {
+    let status: SeatHoldStatus | undefined;
+    let stale = false;
     const qb: Record<string, jest.Mock> = {};
     for (const method of ['innerJoin', 'where', 'andWhere', 'select']) {
-      qb[method] = jest.fn(() => qb);
+      qb[method] = jest.fn(
+        (clause: string, params?: { status?: SeatHoldStatus }) => {
+          if (params?.status) status = params.status;
+          if (clause === 'h.expires_at <= :now') stale = true;
+          return qb;
+        },
+      );
     }
-    qb.getRawMany = jest
-      .fn()
-      .mockResolvedValue(seatIds.map((seatId) => ({ seatId })));
+    qb.getRawMany = jest.fn(async () => {
+      if (stale) {
+        return (options.staleBookings ?? []).map((b) => ({ bookingId: b.id }));
+      }
+      const seatIds =
+        status === SeatHoldStatus.CONVERTED
+          ? (options.soldSeatIds ?? [])
+          : (options.heldSeatIds ?? []);
+      return seatIds.map((seatId) => ({ seatId }));
+    });
     return qb;
   };
 
+  const lockOrder: number[] = [];
   return {
-    createQueryBuilder: jest.fn((entity: unknown) =>
-      queryBuilder(
-        entity === BookingSeat
-          ? (options.soldSeatIds ?? [])
-          : (options.heldSeatIds ?? []),
-      ),
+    lockOrder,
+    createQueryBuilder: jest.fn(() => queryBuilder()),
+    findOne: jest.fn(
+      async (_entity: unknown, options2: { where: { id: number } }) => {
+        lockOrder.push(options2.where.id);
+        return (
+          (options.staleBookings ?? []).find(
+            (b) => b.id === options2.where.id,
+          ) ?? null
+        );
+      },
     ),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
     create: jest.fn((_entity: unknown, data: object) => ({ ...data })),
     save: jest.fn(async (entity: any) => {
       const isHoldBatch = Array.isArray(entity) && 'expiresAt' in entity[0];
@@ -102,7 +143,13 @@ function buildService(managerOptions: ManagerOptions = {}) {
     generateUniqueRef: jest.fn().mockResolvedValue('ABCDEFGHJK'),
   };
   const bookingRepo = {
-    findOne: jest.fn().mockResolvedValue({ id: 99, bookingRef: 'ABCDEFGHJK' }),
+    findOneOrFail: jest
+      .fn()
+      .mockResolvedValue({ id: 99, bookingRef: 'ABCDEFGHJK' }),
+  };
+
+  const eventsPublisher = {
+    publishExpired: jest.fn().mockResolvedValue(undefined),
   };
 
   const service = new HoldService(
@@ -113,10 +160,12 @@ function buildService(managerOptions: ManagerOptions = {}) {
     theatreClient as unknown as TheatreClient,
     seatLockService as unknown as SeatLockService,
     bookingRefGenerator as unknown as BookingRefGenerator,
+    eventsPublisher as unknown as BookingEventsPublisher,
   );
 
   return {
     service,
+    eventsPublisher,
     manager,
     dataSource,
     showClient,
@@ -230,5 +279,91 @@ describe('HoldService', () => {
       10, 11,
     ]);
     expect(seatLockService.release).toHaveBeenCalledTimes(2);
+  });
+
+  it('writes booking_seats and seat_holds in ascending seat ID order, whatever the request order', async () => {
+    const { service, manager } = buildService();
+
+    await service.holdSeats({ ...DTO, seatIds: ['11', '10'] });
+
+    const seatIdsOf = (call: number) =>
+      (manager.save.mock.calls[call][0] as { seatId: number }[]).map(
+        (s) => s.seatId,
+      );
+    expect(seatIdsOf(1)).toEqual([10, 11]); // booking_seats
+    expect(seatIdsOf(2)).toEqual([10, 11]); // seat_holds
+  });
+
+  describe('stale-hold reclaim', () => {
+    const past = new Date(Date.now() - 60_000);
+    const stale = (
+      id: number,
+      overrides: Partial<StaleBooking> = {},
+    ): StaleBooking => ({
+      id,
+      bookingRef: `OLD000000${id}`,
+      showId: 1,
+      status: BookingStatus.HOLDING,
+      holdExpiresAt: past,
+      paymentExpiresAt: null,
+      ...overrides,
+    });
+
+    it('expires bookings whose holds have run out, then creates the new hold', async () => {
+      const old = stale(5);
+      const { service, manager, eventsPublisher } = buildService({
+        staleBookings: [old],
+      });
+
+      await service.holdSeats(DTO);
+
+      expect(old.status).toBe(BookingStatus.EXPIRED);
+      expect(manager.update).toHaveBeenCalledWith(
+        SeatHold,
+        { bookingId: 5, status: SeatHoldStatus.ACTIVE },
+        { status: SeatHoldStatus.EXPIRED },
+      );
+      expect(eventsPublisher.publishExpired).toHaveBeenCalledWith({
+        bookingRef: 'OLD0000005',
+        showId: 1,
+      });
+    });
+
+    it('locks the stale bookings in ascending ID order', async () => {
+      const { service, manager } = buildService({
+        staleBookings: [stale(9), stale(3), stale(7)],
+      });
+
+      await service.holdSeats(DTO);
+
+      expect(manager.lockOrder).toEqual([3, 7, 9]);
+    });
+
+    it('leaves a booking alone if, under its lock, it is no longer overdue', async () => {
+      // e.g. it moved to PAYMENT_PENDING with a later deadline after the read.
+      const paying = stale(5, {
+        status: BookingStatus.PAYMENT_PENDING,
+        paymentExpiresAt: new Date(Date.now() + 60_000),
+      });
+      const { service, manager, eventsPublisher } = buildService({
+        staleBookings: [paying],
+      });
+
+      await service.holdSeats(DTO);
+
+      expect(paying.status).toBe(BookingStatus.PAYMENT_PENDING);
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(eventsPublisher.publishExpired).not.toHaveBeenCalled();
+    });
+
+    it('publishes nothing when the hold itself fails', async () => {
+      const { service, eventsPublisher } = buildService({
+        staleBookings: [stale(5)],
+        soldSeatIds: [10],
+      });
+
+      await expectAppError(service.holdSeats(DTO), 422);
+      expect(eventsPublisher.publishExpired).not.toHaveBeenCalled();
+    });
   });
 });

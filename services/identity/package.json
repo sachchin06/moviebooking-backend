@@ -69,6 +69,9 @@
       "ts"
     ],
     "rootDir": "src",
+    "setupFiles": [
+      "reflect-metadata"
+    ],
     "testRegex": ".*.spec.ts$",
     "transform": {
       "^.+.(t|j)s$": "ts-jest"
@@ -77,6 +80,14 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "statements": 50,
+        "branches": 45,
+        "functions": 35,
+        "lines": 50
+      }
+    }
   }
 }

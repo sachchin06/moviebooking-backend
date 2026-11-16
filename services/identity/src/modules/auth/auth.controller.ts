@@ -23,7 +23,12 @@ import {
   RefreshResponseDto,
   ProfileResponseDto,
 } from './dto/auth-response.dto';
-import { JwtAuthGuard, CurrentUser, ICurrentUser } from '@moviebooking/common';
+import {
+  AllowPasswordChangePending,
+  JwtAuthGuard,
+  CurrentUser,
+  ICurrentUser,
+} from '@moviebooking/common';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -64,6 +69,7 @@ export class AuthController {
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
+  @AllowPasswordChangePending()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
@@ -78,6 +84,7 @@ export class AuthController {
 
   @Patch('password')
   @UseGuards(JwtAuthGuard)
+  @AllowPasswordChangePending()
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Change password',
@@ -98,6 +105,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
+  @AllowPasswordChangePending()
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Get current user profile',

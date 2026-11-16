@@ -12,8 +12,19 @@ build/
 .env.local
 .env.*.local
 
-# Development docs (local only)
-docs/
+# Early planning documents (local only). The published, code-checked docs are
+# docs/architecture.md, docs/adr/ and the Postman collection.
+docs/API Design - Microservices.md
+docs/Architecture Decision Records.md
+docs/architecture-diagram.md
+docs/Backend Development Milestones.md
+docs/CI-CD & Deployment Strategy.md
+docs/DB Design.md
+docs/Deployment & Security Plan.md
+docs/Domain Rules.md
+docs/Movie Ticket Booking System.md
+docs/Testing Strategy.md
+docs/Use Cases.md
 
 # IDE
 .idea/
@@ -46,3 +57,6 @@ temp/
 project-audit.md
 progress-log.md
 fix-log.md
+.env.test
+github-issues.md
+project-notes-movie-booking.md

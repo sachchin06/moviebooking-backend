@@ -166,7 +166,7 @@ describe('InternalTransitionsService', () => {
       expect(manager.update).toHaveBeenCalledWith(
         SeatHold,
         { bookingId: booking.id, status: SeatHoldStatus.ACTIVE },
-        { status: SeatHoldStatus.RELEASED },
+        { status: SeatHoldStatus.CONVERTED },
       );
       expect(publisher.publishConfirmed).toHaveBeenCalledWith({
         bookingRef: booking.bookingRef,

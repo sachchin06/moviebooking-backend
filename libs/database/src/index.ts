@@ -31,3 +31,9 @@ export * from './entities/seat-hold.entity';
 
 // Enums
 export * from './enums';
+
+// Domain rules
+export * from './domain/booking-transitions';
+
+// Maintenance
+export * from './repair/seat-conflicts';

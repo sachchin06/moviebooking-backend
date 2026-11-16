@@ -64,7 +64,7 @@ There are 57 public and 20 internal endpoints across the five services. More det
 | Service | Status | What works | Known gaps | Tests |
 |---|---|---|---|---|
 | identity | Working | Login, token refresh, password change, admin user management with temporary passwords, roles | Logout does not revoke tokens; no rate limiting on login | 35 unit |
-| theatre | Working | Theatres, screens, seats with bulk create and update, theatre-admin assignment; refuses to deactivate anything with future shows | No integration tests | 50 unit |
+| theatre | Working | Theatres, screens, seats with bulk create and update, theatre-admin assignment; refuses to deactivate a theatre or screen with future shows | No integration tests | 50 unit |
 | movie | Working | Movie catalogue, image URLs with a primary image, movie requests from theatre admins and their review | Images are URLs, there is no file upload; no integration tests | 26 unit |
 | show | Working | Show scheduling without overlaps per screen, prices per seat type | No integration tests | 74 unit |
 | booking | Working | Seat availability, seat holds, the booking state machine, expiry sweep, internal endpoints for a payment service, events | Nothing calls the payment endpoints yet; events can be lost (no outbox); holds don't yet check that the show hasn't started | 120 unit, 16 integration |
@@ -108,7 +108,7 @@ Each has a longer write-up in [docs/adr/](docs/adr/).
 
 **Stale holds are reclaimed in the hold request, in a fixed order.** Waiting up to a minute for the sweep would refuse seats that are really free, so a hold request first expires overdue bookings on the seats it wants. Several resources are locked at once, so they are always taken in the same order to avoid deadlocks: Redis locks by seat ID, booking rows by booking ID, a booking before its holds, and new holds inserted by seat ID. The last rule came from an intermittent deadlock in the overlapping-seats test. ([ADR 0003](docs/adr/0003-stale-hold-reclaim-and-lock-ordering.md))
 
-**Show scheduling takes one lock per screen.** Two shows created at once on the same screen can each pass the overlap check. Range locks on the time columns would depend on the index the optimiser picks and could lock far more than one screen, so a create or reschedule first calls `sp_getapplock` on `show-schedule:screen:<id>` inside its transaction. A second change to the same screen waits, then sees the first; a 5-second timeout returns 409. ([ADR 0004](docs/adr/0004-per-screen-applock-for-show-scheduling.md))
+**Show scheduling takes one lock per screen.** Two shows created at once on the same screen can each pass the overlap check. Range locks on the time columns would depend on the index the optimiser picks and could lock far more than one screen, so a create or reschedule first calls `sp_getapplock` on `show-schedule:screen:<id>` inside its transaction. A second change to the same screen waits, then sees the first (checked by hand on SQL Server; the show service's tests are unit tests); a 5-second timeout returns 409. ([ADR 0004](docs/adr/0004-per-screen-applock-for-show-scheduling.md))
 
 **Row locks make cancel and confirm take turns.** A guest cancelling while the payment confirms could leave a paid booking marked as failed. Every transition reads the booking with `pessimistic_write` (`UPDLOCK, ROWLOCK` on SQL Server), checks the state machine, then writes, so the second caller sees the first one's result. An integration test races the two and never finds a confirmed booking overwritten. ([ADR 0005](docs/adr/0005-row-locks-for-booking-transitions.md))
 
@@ -118,7 +118,7 @@ Each has a longer write-up in [docs/adr/](docs/adr/).
 
 **Public IDs are encrypted.** Sequential integer keys in URLs let anyone count records. Public responses carry IDs encrypted with AES-256-GCM (random 12-byte IV, 16-byte tag, base64url). Incoming IDs that do not decrypt, including plain numbers, get 400. Services use plain integers between themselves. ([ADR 0008](docs/adr/0008-encrypted-public-ids.md))
 
-**A late payment goes to PENDING_REVIEW.** A payment can complete after the reservation deadline, when the seats may already be on sale again. Confirming would risk a double sale, and rejecting would keep money for nothing, so the booking moves to PENDING_REVIEW and its holds are released in the same transaction. A person then decides on a refund. ([ADR 0009](docs/adr/0009-late-payment-to-pending-review.md))
+**A late payment goes to PENDING_REVIEW.** A payment can complete after the reservation deadline, when the seats may already be on sale again. Confirming would risk a double sale, and rejecting would keep money for nothing, so the booking moves to PENDING_REVIEW and its holds are released in the same transaction. Admins can list these bookings by status; deciding on a refund is manual, and there is no endpoint for it yet. ([ADR 0009](docs/adr/0009-late-payment-to-pending-review.md))
 
 **One shared database, for now.** A database per service brings cross-service consistency problems long before a project this size gets the benefits. Each service owns its tables and asks other services over REST rather than joining their tables, and bookings snapshot prices and seat codes, so a later split is possible. Foreign keys do cross ownership lines today, and a migration can affect several services. ([ADR 0010](docs/adr/0010-shared-database.md))
 
@@ -138,20 +138,20 @@ Each has a longer write-up in [docs/adr/](docs/adr/).
 
 ## Getting started
 
-You need Node.js 20 or later with npm 10, Docker, and a SQL Server instance you can reach (SQL Server is not part of `docker-compose.yml`; a local install or your own container both work).
+You need Node.js 20 or later with npm 10, Docker, and a SQL Server instance you can reach (SQL Server is not part of `docker-compose.yml`).
 
 ```bash
 npm ci
 cp .env.example .env
 ```
 
-Fill in `.env`. The values without defaults are required:
+Fill in `.env`. These must be set:
 
-- `DB_PASSWORD` and the other `DB_*` settings for your SQL Server;
+- `DB_PASSWORD` and the other `DB_*` settings for your SQL Server (`DB_ENCRYPT` and `DB_TRUST_SERVER_CERTIFICATE` are optional);
 - `JWT_SECRET` and `JWT_REFRESH_SECRET`;
 - `ID_ENCRYPTION_KEY`;
 - `INTERNAL_API_KEY` (the same value for every service; `.env.example` shows how to generate one);
-- `ADMIN_EMAIL` and `ADMIN_PASSWORD` for the first super admin, created by a migration;
+- `ADMIN_NAME`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` for the first super admin, created by a migration;
 - `REDIS_PASSWORD`, `RABBITMQ_USER` and `RABBITMQ_PASSWORD`, which Docker Compose also reads.
 
 Then start Redis and RabbitMQ, build the shared libraries (the services import them from `dist/`), and run the migrations:
